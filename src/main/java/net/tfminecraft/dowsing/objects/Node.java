@@ -13,7 +13,10 @@ import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Sound;
+import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.ItemDisplay;
+import org.bukkit.entity.ItemFrame;
 import org.bukkit.entity.Player;
 
 import dev.lone.itemsadder.api.CustomFurniture;
@@ -639,14 +642,7 @@ public class Node {
 		if(type.equalsIgnoreCase("v")) {
 			this.loc.getBlock().setType(Material.AIR);
 		} else if(type.equalsIgnoreCase("ia")) {
-			Location center = this.loc.clone().add(0.5, 0.5, 0.5);
-			for(Entity a : this.loc.getWorld().getNearbyEntities(center, 1.5, 1.5, 1.5)) {
-				CustomFurniture f = CustomFurniture.byAlreadySpawned(a);
-				if(f != null) {
-					f.remove(false);
-					break;
-				}
-			}
+			removeNearbyFurniture();
 			if(this.loc.getBlock().getType() != Material.AIR) {
 				this.loc.getBlock().setType(Material.AIR);
 			}
@@ -657,5 +653,30 @@ public class Node {
 		dropper.dropItem(loc, path, false);
 		loc.getWorld().playSound(loc, Sound.ENTITY_GLOW_ITEM_FRAME_REMOVE_ITEM, 0.5f, 1f);
 		NodeManager.requestNodeBenefitSync();
+	}
+
+	private void removeNearbyFurniture() {
+		Location center = this.loc.clone().add(0.5, 0.5, 0.5);
+		for(Entity entity : this.loc.getWorld().getNearbyEntities(center, 1.5, 1.5, 1.5)) {
+			if(!isFurnitureCarrier(entity)) continue;
+			CustomFurniture furniture = lookupFurniture(entity);
+			if(furniture != null) {
+				furniture.remove(false);
+				break;
+			}
+		}
+	}
+
+	private static CustomFurniture lookupFurniture(Entity entity) {
+		try {
+			return CustomFurniture.byAlreadySpawned(entity);
+		} catch (RuntimeException ex) {
+			// ItemsAdder throws for entities that are not furniture instead of returning null.
+			return null;
+		}
+	}
+
+	private static boolean isFurnitureCarrier(Entity entity) {
+		return entity instanceof ArmorStand || entity instanceof ItemFrame || entity instanceof ItemDisplay;
 	}
 }
