@@ -1,7 +1,7 @@
-main: me.Plugins.Dowsing.DowsingMain
-api-version: 1.20
+main: net.tfminecraft.dowsing.DowsingMain
+api-version: '1.21.10'
 name: Dowsing
-version: 3.0.3
+version: '${project.version}'
 author: Drefvelin
 
 depend: [TLibs, SimpleFactions, MMOItems, MythicLib, ItemsAdder]
@@ -9,5 +9,5 @@ softdepend: [Magic]
 
 commands:
   dowsing:
-      useage: /<command>
-      description: Dowsing Command
+    usage: /<command>
+    description: Manage and inspect Dowsing resource nodes.
