@@ -29,12 +29,6 @@ Originally created by [Drefvelin](https://github.com/Drefvelin).
 
 Technical documentation is maintained in [TF-Minecraft/Docs](https://github.com/TF-Minecraft/Docs).
 
-## Building
-
-Dowsing targets Java 21 and Paper 1.21.10. Its build requires the pinned TFMC
-plugin APIs and licensed server dependencies described in the
-[shared pipeline guide](https://github.com/TF-Minecraft/Docs/blob/main/PIPELINES.md).
-
 ## License
 
 Copyright (c) 2026 TF-Minecraft contributors.
