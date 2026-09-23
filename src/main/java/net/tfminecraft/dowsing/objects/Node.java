@@ -659,15 +659,20 @@ public class Node {
 		Location center = this.loc.clone().add(0.5, 0.5, 0.5);
 		for(Entity entity : this.loc.getWorld().getNearbyEntities(center, 1.5, 1.5, 1.5)) {
 			if(!isFurnitureCarrier(entity)) continue;
-			try {
-				CustomFurniture furniture = CustomFurniture.byAlreadySpawned(entity);
-				if(furniture != null) {
-					furniture.remove(false);
-					break;
-				}
-			} catch (RuntimeException ex) {
-				// ItemsAdder throws for entities that are not furniture instead of returning null.
+			CustomFurniture furniture = lookupFurniture(entity);
+			if(furniture != null) {
+				furniture.remove(false);
+				break;
 			}
+		}
+	}
+
+	private static CustomFurniture lookupFurniture(Entity entity) {
+		try {
+			return CustomFurniture.byAlreadySpawned(entity);
+		} catch (RuntimeException ex) {
+			// ItemsAdder throws for entities that are not furniture instead of returning null.
+			return null;
 		}
 	}
 
