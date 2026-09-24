@@ -36,12 +36,39 @@ class NodeDeactivationTest {
 		assertFalse(node.getIsActive());
 		assertEquals(1, node.attempts);
 		assertEquals(3, node.getInputCounter());
+		assertTrue(node.hasPendingRefund());
 
 		node.successfulRefundsRemaining = 3;
 		node.deActivate();
 
 		assertEquals(4, node.attempts);
 		assertEquals(0, node.getInputCounter());
+		assertFalse(node.hasPendingRefund());
+	}
+
+	@Test
+	void activationRetriesPendingRefundWithoutStartingANewCycle() {
+		RefundNode node = new RefundNode(3, 0);
+		node.deActivate();
+		node.successfulRefundsRemaining = 3;
+
+		node.activate();
+
+		assertEquals(0, node.getInputCounter());
+		assertFalse(node.getIsActive());
+		assertFalse(node.hasPendingRefund());
+	}
+
+	@Test
+	void onlyInterruptedInactiveCyclesHavePendingRefunds() {
+		RefundNode node = new RefundNode(3, 0);
+		assertFalse(node.hasPendingRefund());
+		node.isActive = false;
+		assertTrue(node.hasPendingRefund());
+		node.setCycleTime(0);
+		assertFalse(node.hasPendingRefund());
+		node.setCycleTime(Cache.cycleLength);
+		assertFalse(node.hasPendingRefund());
 	}
 
 	@Test

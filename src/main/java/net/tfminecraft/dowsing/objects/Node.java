@@ -404,6 +404,10 @@ public class Node {
 		ng.refund(this);;
 	}
 	public void activate() {
+		if(hasPendingRefund()) {
+			deActivate();
+			return;
+		}
 		if(isClaimable()) return;
 		NodeEngine ng = new NodeEngine();
 		Boolean failed = false;
@@ -455,6 +459,11 @@ public class Node {
 		this.cycleTime = 0;
 		ng.takeInputs(this);
 		NodeManager.requestNodeBenefitSync();
+	}
+	/** Whether an inactive node still owes refunds from an interrupted cycle. */
+	public boolean hasPendingRefund() {
+		return !this.isActive && this.inputCounter > 0
+				&& this.cycleTime > 0 && this.cycleTime < Cache.cycleLength;
 	}
 	public void deActivate() {
 		this.isActive = false;

@@ -334,7 +334,13 @@ public class InventoryManager {
 			i.setType(Material.RED_STAINED_GLASS_PANE);
 			ItemMeta m = i.getItemMeta();
 			m.setDisplayName("§cINACTIVE");
-			if(n.getErrors().size() > 0) {
+			if(n.hasPendingRefund()) {
+				m.setDisplayName("§eRetry Refund");
+				List<String> lore = new ArrayList<>(n.getErrors());
+				lore.add("§7Restore the barrel and hopper, then click to retry.");
+				lore.add("§7Refunds must finish before changing or activating this node.");
+				m.setLore(lore);
+			} else if(n.getErrors().size() > 0) {
 				m.setLore(n.getErrors());
 			}
 			i.setItemMeta(m);
