@@ -393,6 +393,7 @@ public class NodeManager implements Listener{
 		InventoryManager inv = new InventoryManager();
 		if(e.getView().getTitle().equalsIgnoreCase("§7"+n.getBlock().getResource()+ " Node")) {
 			e.setCancelled(true);
+			if(e.getClickedInventory() != e.getView().getTopInventory()) return;
 			if(!n.hasGuild()) {
 				n.breakNode();
 				nodes.remove(n);
@@ -494,6 +495,7 @@ public class NodeManager implements Listener{
 			}
 		} else if(currentSlot.get(p) != null && e.getView().getTitle().equalsIgnoreCase("§7"+n.getBlock().getResource()+" Node: "+WordUtils.capitalize(currentSlot.get(p).getId().replace("_", " ")))) {
 			e.setCancelled(true);
+			if(e.getClickedInventory() != e.getView().getTopInventory()) return;
 			if(e.getSlot() != 26 && blockPendingRefund(p, n)) return;
 			if(!n.hasGuild()) {
 				n.breakNode();
@@ -530,6 +532,7 @@ public class NodeManager implements Listener{
 			currentNode.put(p, n);
 		} else if(e.getView().getTitle().equalsIgnoreCase("§7"+n.getBlock().getResource()+" Node: Type")) {
 			e.setCancelled(true);
+			if(e.getClickedInventory() != e.getView().getTopInventory()) return;
 			if(e.getSlot() != 26 && blockPendingRefund(p, n)) return;
 			if(!n.hasGuild()) {
 				n.breakNode();
@@ -564,6 +567,7 @@ public class NodeManager implements Listener{
 			inv.confirmView(p);
 		} else if(e.getView().getTitle().equalsIgnoreCase("§7Confirm Action")) {
 			e.setCancelled(true);
+			if(e.getClickedInventory() != e.getView().getTopInventory()) return;
 			if(!n.hasGuild()) {
 				n.breakNode();
 				nodes.remove(n);

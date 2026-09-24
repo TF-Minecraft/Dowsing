@@ -50,8 +50,30 @@ class NodeRefundMenuTest {
 		when(click.getWhoClicked()).thenReturn(player);
 		when(click.getView()).thenReturn(view);
 		when(view.getTitle()).thenReturn("§7Iron Node");
-		when(click.getClickedInventory()).thenReturn(mock(Inventory.class));
+		Inventory top = mock(Inventory.class);
+		when(click.getClickedInventory()).thenReturn(top);
+		when(view.getTopInventory()).thenReturn(top);
 		manager.currentNode.put(player, node);
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = {"§7Iron Node", "§7Iron Node: Type", "§7Iron Node: Fuel", "§7Confirm Action"})
+	void lowerInventoryClicksCannotTriggerNodeActions(String title) {
+		NodeSlot slot = mock(NodeSlot.class);
+		when(slot.getId()).thenReturn("fuel");
+		manager.currentSlot.put(player, slot);
+		when(view.getTitle()).thenReturn(title);
+		when(click.getSlot()).thenReturn(17);
+		when(click.getClickedInventory()).thenReturn(mock(Inventory.class));
+
+		manager.invenClick(click);
+
+		verify(click).setCancelled(true);
+		verify(node, never()).deActivate();
+		verify(node, never()).activate();
+		verify(node, never()).update();
+		verify(node, never()).breakNode();
+		verify(player, never()).sendMessage(anyString());
 	}
 
 	@ParameterizedTest

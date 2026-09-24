@@ -9,6 +9,8 @@ import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import net.tfminecraft.dowsing.Cache;
 
@@ -27,9 +29,11 @@ class NodeDeactivationTest {
 		Cache.cycleLength = previousCycleLength;
 	}
 
-	@Test
-	void failedRefundStopsAndKeepsPendingInputsForRetry() {
+	@ParameterizedTest
+	@ValueSource(ints = {0, 1})
+	void failedRefundStopsAndKeepsPendingInputsForRetry(int cycleTime) {
 		RefundNode node = new RefundNode(3, 0);
+		node.setCycleTime(cycleTime);
 
 		node.deActivate();
 
@@ -66,6 +70,8 @@ class NodeDeactivationTest {
 		node.isActive = false;
 		assertTrue(node.hasPendingRefund());
 		node.setCycleTime(0);
+		assertTrue(node.hasPendingRefund());
+		node.setCycleTime(-1);
 		assertFalse(node.hasPendingRefund());
 		node.setCycleTime(Cache.cycleLength);
 		assertFalse(node.hasPendingRefund());
@@ -82,9 +88,11 @@ class NodeDeactivationTest {
 		assertEquals(2, node.getInputCounter());
 	}
 
-	@Test
-	void successfulRefundsDrainPendingInputs() {
+	@ParameterizedTest
+	@ValueSource(ints = {0, 1})
+	void successfulRefundsDrainPendingInputs(int cycleTime) {
 		RefundNode node = new RefundNode(3, 3);
+		node.setCycleTime(cycleTime);
 
 		node.deActivate();
 

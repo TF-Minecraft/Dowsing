@@ -463,12 +463,12 @@ public class Node {
 	/** Whether an inactive node still owes refunds from an interrupted cycle. */
 	public boolean hasPendingRefund() {
 		return !this.isActive && this.inputCounter > 0
-				&& this.cycleTime > 0 && this.cycleTime < Cache.cycleLength;
+				&& this.cycleTime >= 0 && this.cycleTime < Cache.cycleLength;
 	}
 	public void deActivate() {
 		this.isActive = false;
 		if(isClaimable()) return;
-		if(this.cycleTime > 0 && this.cycleTime < Cache.cycleLength) {
+		if(this.cycleTime >= 0 && this.cycleTime < Cache.cycleLength) {
 			while(this.getInputCounter() > 0) {
 				int pendingInputs = this.getInputCounter();
 				refund();
