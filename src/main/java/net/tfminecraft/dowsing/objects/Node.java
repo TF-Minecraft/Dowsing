@@ -461,7 +461,10 @@ public class Node {
 		if(isClaimable()) return;
 		if(this.cycleTime > 0 && this.cycleTime < Cache.cycleLength) {
 			while(this.getInputCounter() > 0) {
+				int pendingInputs = this.getInputCounter();
 				refund();
+				// A missing barrel or hopper prevents refunds. Keep the pending inputs for retry.
+				if(this.getInputCounter() >= pendingInputs) break;
 			}
 		}
 		NodeManager.requestNodeBenefitSync();
