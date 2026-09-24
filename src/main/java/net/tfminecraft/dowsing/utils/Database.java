@@ -140,6 +140,9 @@ public class Database {
     				}
     				setSlots(currentType, activePMs);
     				Node n = new Node(id, b, loc, g, isActive, level, cycleTime, currentType, timeLeft, inputCounter, efficiency);
+    				if(json.containsKey(LastCycleResult.KEY)) {
+    					n.setLastResult(LastCycleResult.fromJson(json.get(LastCycleResult.KEY)));
+    				}
     				NodeManager.nodes.add(n);
     			} catch (Exception ex) {
     				ex.printStackTrace();
@@ -261,6 +264,7 @@ public class Database {
         	}
         	defaults.put("active pms", pmArray);
 			defaults.put("efficiency", n.getEfficiency());
+			defaults.put(LastCycleResult.KEY, LastCycleResult.toJson(n.getLastResult()));
         	save(file, defaults);
         } catch (Throwable ex) {
 			ex.printStackTrace();
