@@ -404,6 +404,10 @@ public class Node {
 		ng.refund(this);;
 	}
 	public void activate() {
+		if(hasPendingRefund()) {
+			deActivate();
+			return;
+		}
 		if(isClaimable()) return;
 		NodeEngine ng = new NodeEngine();
 		Boolean failed = false;
@@ -456,12 +460,20 @@ public class Node {
 		ng.takeInputs(this);
 		NodeManager.requestNodeBenefitSync();
 	}
+	/** Whether an inactive node still owes refunds from an interrupted cycle. */
+	public boolean hasPendingRefund() {
+		return !this.isActive && this.inputCounter > 0
+				&& this.cycleTime >= 0 && this.cycleTime < Cache.cycleLength;
+	}
 	public void deActivate() {
 		this.isActive = false;
 		if(isClaimable()) return;
-		if(this.cycleTime > 0 && this.cycleTime < Cache.cycleLength) {
+		if(this.cycleTime >= 0 && this.cycleTime < Cache.cycleLength) {
 			while(this.getInputCounter() > 0) {
+				int pendingInputs = this.getInputCounter();
 				refund();
+				// A missing barrel or hopper prevents refunds. Keep the pending inputs for retry.
+				if(this.getInputCounter() >= pendingInputs) break;
 			}
 		}
 		NodeManager.requestNodeBenefitSync();
