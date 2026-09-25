@@ -43,6 +43,7 @@ import net.tfminecraft.dowsing.objects.ProductionMethod;
 import net.tfminecraft.dowsing.utils.ItemDropper;
 import net.tfminecraft.dowsing.utils.NodeEngine;
 import net.tfminecraft.dowsing.utils.NodeReloader;
+import net.tfminecraft.dowsing.utils.NodeToggleLog;
 import net.tfminecraft.dowsing.enums.ConfirmType;
 import net.tfminecraft.simplefactions.guild.Guild;
 import net.tfminecraft.simplefactions.managers.FactionManager;
@@ -101,10 +102,9 @@ public class NodeManager implements Listener{
 		if (g == null) return 0;
 		double total = 0;
 		for (Node n : nodes) {
-			if (!n.hasGuild()) continue;
+			if (!n.getIsActive() || !n.hasGuild()) continue;
 			if (!n.getGuild().getId().equalsIgnoreCase(g.getId())) continue;
-			Double upkeep = n.getUpkeep();
-			if (upkeep != null) total += upkeep;
+			total += n.getDailyUpkeep();
 		}
 		return total;
 	}
@@ -233,7 +233,9 @@ public class NodeManager implements Listener{
 	public void confirmClick(Player p, Node n, ConfirmType t) {
 		if(t != ConfirmType.DEACTIVATE && blockPendingRefund(p, n)) return;
 		if(t.equals(ConfirmType.DEACTIVATE)) {
+			boolean wasActive = n.getIsActive();
 			n.deActivate();
+			if(wasActive) NodeToggleLog.deactivated(p, n);
 			InventoryManager inv = new InventoryManager();
 			inv.nodeView(p, n);
 			currentNode.put(p, n);
@@ -452,6 +454,7 @@ public class NodeManager implements Listener{
 				} else {
 					n.activate();
 					if(n.getIsActive()) {
+						NodeToggleLog.activated(p, n);
 						p.playSound(p.getLocation(), Sound.BLOCK_NOTE_BLOCK_BIT, 1f, 1f);
 					} else {
 						p.playSound(p.getLocation(), Sound.ENTITY_VILLAGER_NO, 1f, 1f);

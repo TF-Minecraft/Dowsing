@@ -357,7 +357,8 @@ public class InventoryManager {
 			lore.add(" ");
 			lore.add("§4WARNING!");
 			lore.add("§cDeactivating resets the current cycle!");
-			lore.add("§cThe cost of the current cycle will be refunded.");
+			lore.add("§cThe inputs of the current cycle will be refunded.");
+			lore.add("§7Upkeep is charged at each new day while active.");
 			m.setLore(lore);
 			i.setItemMeta(m);
 		}

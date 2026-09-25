@@ -92,9 +92,6 @@ public class NodeEngine {
 				inputs.put(key, amount);
 			}
 		}
-		if(n.getGuild() != null && n.getGuild().getBank() != null) {
-			n.getGuild().getBank().deposit(n.getUpkeep());
-		}
 		n.setInputCounter(n.getInputCounter()-1);
 		for(String key : inputs.keySet()) {
 			addItem(key, inputs.get(key), i);

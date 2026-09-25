@@ -137,7 +137,7 @@ public class ItemCreator {
 		}
 		lore.add("§eYield: §a"+n.getYield());
 		Formatter format = new Formatter();
-		lore.add("§eTotal Upkeep: §f"+format.formatDouble(n.getUpkeep()*n.getCostIncrease())+"d");
+		lore.add("§eTotal Upkeep: §f"+format.formatDouble(n.getDailyUpkeep())+"d/day");
 		lore.add("§7Possible Drops:");
 		Double maxWeight = 0.0;
 		for(String s : n.getCompleteDrop().keySet()) {
