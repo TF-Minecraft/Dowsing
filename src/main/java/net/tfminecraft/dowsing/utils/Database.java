@@ -15,6 +15,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.TreeMap;
 import java.util.UUID;
+import java.util.logging.Level;
 
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -27,6 +28,7 @@ import org.json.simple.parser.JSONParser;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
+import net.tfminecraft.dowsing.DowsingMain;
 import net.tfminecraft.dowsing.loaders.BlockLoader;
 import net.tfminecraft.dowsing.loaders.PMLoader;
 import net.tfminecraft.dowsing.loaders.TypeLoader;
@@ -59,8 +61,7 @@ public class Database {
 	                	}
         	  	      myReader.close();   
         	  	    } catch (FileNotFoundException e) {
-        	  	      System.out.println("An error occurred.");
-        	  	      e.printStackTrace();
+                  DowsingMain.plugin.getLogger().log(Level.WARNING, "Could not read resource file " + file, e);
         	  	    }
             }
     	}
@@ -80,8 +81,7 @@ public class Database {
 	                		return true;
 	                	}
         	  	    } catch (FileNotFoundException e) {
-        	  	      System.out.println("An error occurred.");
-        	  	      e.printStackTrace();
+                  DowsingMain.plugin.getLogger().log(Level.WARNING, "Could not read resource file " + file, e);
         	  	    }
             }
     	}
@@ -156,7 +156,7 @@ public class Database {
 			for(NodeSlot slot : t.getSlots()) {
 				if(slot.getId().equalsIgnoreCase(type)) {
 					slot.setActivePm(PMLoader.getByString(pm.split("\\.")[1]));
-					System.out.println(slot.getActivePm().getId());
+					DowsingMain.plugin.getLogger().info(slot.getActivePm().getId());
 				}
 			}
 		}
