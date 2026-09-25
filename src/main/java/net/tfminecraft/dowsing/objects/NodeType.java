@@ -7,6 +7,7 @@ import java.util.Set;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.inventory.ItemStack;
 
+import net.tfminecraft.dowsing.DowsingMain;
 import net.tfminecraft.dowsing.loaders.SlotLoader;
 import net.tfminecraft.dowsing.utils.ItemCreator;
 
@@ -126,7 +127,7 @@ public class NodeType {
 		}
 		if(config.contains("biomes")) {
 			this.biomes = config.getStringList("biomes");
-			System.out.println(this.biomes);
+			DowsingMain.plugin.getLogger().info(this.biomes.toString());
 		}
 	}
 	public NodeType(NodeType another) {
