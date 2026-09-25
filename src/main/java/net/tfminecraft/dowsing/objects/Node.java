@@ -67,6 +67,12 @@ public class Node {
 	public void setUpkeep(Double upkeep) {
 		this.upkeep = upkeep;
 	}
+	/** Charged by the SimpleFactions daily settlement for each day the node is active. */
+	public double getDailyUpkeep() {
+		double base = upkeep == null ? 0.0 : upkeep;
+		double increase = costIncrease == null ? 1.0 : costIncrease;
+		return Math.round(base * increase * 100.0) / 100.0;
+	}
 	public UUID getId() {
 		return id;
 	}
@@ -432,7 +438,7 @@ public class Node {
 			this.errors.add("§7No bank");
 		}
 		if(this.guild != null && this.guild.getBank() != null) {
-			if(this.guild.isBankrupt() || this.guild.getBank().getWealth() < this.upkeep) {
+			if(this.guild.isBankrupt() || this.guild.getBank().getWealth() < getDailyUpkeep()) {
 				failed = true;
 				this.errors.add("§7Lacking upkeep");
 			}
@@ -453,7 +459,6 @@ public class Node {
 		if(failed) {
 			return;
 		}
-		this.guild.getBank().withdraw(this.upkeep);
 		this.isActive = true;
 		this.timeLeft = this.modifiedTime;
 		this.cycleTime = 0;
