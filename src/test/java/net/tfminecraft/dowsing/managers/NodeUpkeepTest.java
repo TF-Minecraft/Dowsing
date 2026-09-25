@@ -47,6 +47,13 @@ class NodeUpkeepTest {
 	}
 
 	@Test
+	void upkeepRoundsHalfUpToTheCent() {
+		NodeManager.nodes.add(node(guild, true, 0.29, 1.5));
+
+		assertEquals(0.44, NodeManager.getTotalUpkeep(guild));
+	}
+
+	@Test
 	void otherGuildsNodesAreIgnored() {
 		Guild other = mock(Guild.class);
 		when(other.getId()).thenReturn("Other");

@@ -1,6 +1,8 @@
 package net.tfminecraft.dowsing.objects;
 
 import java.io.IOException;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -67,11 +69,25 @@ public class Node {
 	public void setUpkeep(Double upkeep) {
 		this.upkeep = upkeep;
 	}
-	/** Charged by the SimpleFactions daily settlement for each day the node is active. */
+	/**
+	 * Charged by the SimpleFactions daily settlement for each day the node is active. The
+	 * over-capacity multiplier is worked out from the guild's current nodes and capacity,
+	 * since members joining or capacity being bought does not refresh every node.
+	 */
 	public double getDailyUpkeep() {
 		double base = upkeep == null ? 0.0 : upkeep;
-		double increase = costIncrease == null ? 1.0 : costIncrease;
-		return Math.round(base * increase * 100.0) / 100.0;
+		return BigDecimal.valueOf(base)
+				.multiply(BigDecimal.valueOf(currentCostIncrease()))
+				.setScale(2, RoundingMode.HALF_UP)
+				.doubleValue();
+	}
+	double currentCostIncrease() {
+		if(resolveGuild() == null) return costIncrease == null ? 1.0 : costIncrease;
+		return costIncreaseFor(NodeManager.getNodeAmount(this.guild), getCapacity());
+	}
+	static double costIncreaseFor(int nodeAmount, int capacity) {
+		int multiplier = Math.max(1, 1+nodeAmount-capacity);
+		return 1.0+((multiplier-1.0)*0.5);
 	}
 	public UUID getId() {
 		return id;
@@ -570,13 +586,11 @@ public class Node {
 		updateEfficiencyTime();
 		if(timeLeft > modifiedTime) timeLeft = modifiedTime;
 		setCompleteDrops();
-		int newMultipler = 1+NodeManager.getNodeAmount(this.guild)-getCapacity();
-		if(newMultipler < 1) {
-			newMultipler = 1;
-		}
-		this.multiplier = newMultipler;
+		int nodeAmount = NodeManager.getNodeAmount(this.guild);
+		int capacity = getCapacity();
+		this.multiplier = Math.max(1, 1+nodeAmount-capacity);
 		Formatter format = new Formatter();
-		this.costIncrease = format.formatDouble(1.0+((multiplier-1.0)*0.5));
+		this.costIncrease = format.formatDouble(costIncreaseFor(nodeAmount, capacity));
 		this.upkeep = format.formatDouble(this.upkeep);
 	}
 	Double getAddedPrestige(String e) {
