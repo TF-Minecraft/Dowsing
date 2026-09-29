@@ -1,5 +1,12 @@
 package net.tfminecraft.dowsing.utils;
 
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
+import java.util.HashSet;
+import java.util.function.Function;
+import java.util.function.Consumer;
+
 import org.bukkit.Location;
 import org.bukkit.Sound;
 import org.bukkit.entity.Item;
@@ -9,8 +16,36 @@ import org.bukkit.util.Vector;
 import net.tfminecraft.dowsing.objects.Node;
 
 public class ItemDropper {
-	public void dropItems(Node n) {
-		n.getLastResult().clear();
+	private static final Set<String> unavailableRewardsLogged = new HashSet<>();
+	private final Function<String, ItemStack> itemFactory;
+	private final Consumer<String> warning;
+
+	public ItemDropper() {
+		this(new ItemCreator()::getItemFromPath, message -> org.bukkit.Bukkit.getLogger().warning(message));
+	}
+
+	ItemDropper(Function<String, ItemStack> itemFactory, Consumer<String> warning) {
+		this.itemFactory = itemFactory;
+		this.warning = warning;
+	}
+
+	/** Returns false when a configured reward cannot be created, so the cycle can retry. */
+	public boolean dropItems(Node n) {
+		Map<String, ItemStack> items = new HashMap<>();
+		for(String key : n.getCompleteDrop().keySet()) {
+			if(key.equalsIgnoreCase("nothing")) continue;
+			ItemStack item = itemFactory.apply(key);
+			if(item == null) {
+				if(unavailableRewardsLogged.add(key)) {
+					warning.accept("[Dowsing] Cannot complete node " + n.getId()
+							+ ": reward item is unavailable: " + key);
+				}
+				return false;
+			}
+			unavailableRewardsLogged.remove(key);
+			items.put(key, item);
+		}
+		Map<String, Integer> result = new HashMap<>();
 		Double maxWeight = 0.0;
 		for(String key : n.getCompleteDrop().keySet()) {
 			maxWeight = maxWeight+n.getCompleteDrop().get(key);
@@ -30,15 +65,7 @@ public class ItemDropper {
 				if(random <= max && random > previous) {
 					dropped++;
 					if(!key.equalsIgnoreCase("nothing")) {
-						Integer a = 1;
-						if(n.getLastResult().containsKey(key)) {
-							a = 1+n.getLastResult().get(key);
-						}
-						n.getLastResult().put(key, a);
-						Location loc = new Location(n.getLoc().getWorld(), n.getLoc().getX(), n.getLoc().getY(), n.getLoc().getZ());
-						loc.add(0.5,2,0.5);
-						dropItem(loc, key, true);
-						loc.getWorld().playSound(loc, Sound.ENTITY_ITEM_PICKUP, 0.5f, 1f);
+						result.merge(key, 1, Integer::sum);
 					}
 					break;
 				}
@@ -46,6 +73,16 @@ public class ItemDropper {
 			}
 		}
 		n.update();
+		Location loc = n.getLoc().clone().add(0.5, 2, 0.5);
+		for(Map.Entry<String, Integer> entry : result.entrySet()) {
+			for(int count = 0; count < entry.getValue(); count++) {
+				Item e = loc.getWorld().dropItem(loc, items.get(entry.getKey()).clone());
+				e.setVelocity(new Vector());
+				loc.getWorld().playSound(loc, Sound.ENTITY_ITEM_PICKUP, 0.5f, 1f);
+			}
+		}
+		n.setLastResult(result);
+		return true;
 	}
 	public void dropItem(Location loc, String path, Boolean noV) {
 		ItemCreator ic = new ItemCreator();

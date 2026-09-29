@@ -159,24 +159,24 @@ public class NodeManager implements Listener{
 			   {
 					validate();
 					for(Node n : nodes) {
+						try {
 						if(!n.getIsActive()) continue;
 						if(!n.hasGuild()) continue;
 						if(n.getLoc().getChunk().isForceLoaded() == false) {
 							n.getLoc().getChunk().setForceLoaded(true);
+						}
+						if(n.getTimeLeft() <= 0) {
+							if(!new ItemDropper().dropItems(n)) continue;
+							n.setTimeLeft(n.getModifiedTime());
+							n.setInputCounter(0);
 						}
 						n.tickCycle();
 						if(n.getCycleTime().equals(Cache.cycleLength)) {
 							n.setCycleTime(0);
 							n.input();
 						}
-						if(n.getTimeLeft() > 0) {
-							n.tick();
-						} else {
-							ItemDropper dropper = new ItemDropper();
-							dropper.dropItems(n);
-							n.setTimeLeft(n.getModifiedTime());
-							n.setInputCounter(0);
-						}
+						if(!n.getIsActive()) continue;
+						n.tick();
 						for(Player p : Bukkit.getOnlinePlayers()) {
 							if(currentNode.containsKey(p)) {
 								if(currentNode.get(p).getId().equals(n.getId())) {
@@ -189,6 +189,10 @@ public class NodeManager implements Listener{
 									}
 								}
 							}
+						}
+						} catch(RuntimeException ex) {
+							DowsingMain.plugin.getLogger().log(java.util.logging.Level.SEVERE,
+									"Failed to process node " + n.getId() + " at " + n.getLoc(), ex);
 						}
 					}	
 			   }
