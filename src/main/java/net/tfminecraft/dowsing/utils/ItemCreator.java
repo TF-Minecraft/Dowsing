@@ -158,7 +158,7 @@ public class ItemCreator {
 	public ItemStack createNaturalYieldItem(Node n) {
 		ItemStack i = new ItemStack(Material.EMERALD, 1);
 		ItemMeta m = i.getItemMeta();
-		m.setDisplayName("§aChunk has a natural yield of §e"+n.getNaturalYield()+"§a for §e"+WordUtils.capitalize(n.getCurrentType().getResource()));
+		m.setDisplayName("§aThis land has a natural yield of §e"+n.getNaturalYield()+"§a for §e"+WordUtils.capitalize(n.getCurrentType().getResource()));
 		List<String> lore = new ArrayList<String>();
 		lore.add("§7Bonuses will be applied depending on Extraction level");
 		lore.add("§eCurrent Extraction: §f"+n.getExtraction()+" §7(max "+n.getNaturalYield()+")");
