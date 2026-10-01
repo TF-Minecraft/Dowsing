@@ -303,7 +303,7 @@ public class NodeManager implements Listener{
 		}
 		for(Node node : nodes) {
 			if(node.getLoc().getChunk().equals(loc.getChunk())) {
-				p.sendMessage("§cChunk already has a node!");
+				p.sendMessage("§cThere is already a node on this land!");
 				e.setCancelled(true);
 				return;
 			}
@@ -320,7 +320,7 @@ public class NodeManager implements Listener{
 			return;
 		}
 		if(getNodeAmount(g)-getNodeCapacity(g) >= 0 && !b.isSpecial()) {
-			p.sendMessage("§cYou are already filled your node capacity!");
+			p.sendMessage("§cYour guild has already filled its node capacity!");
 			e.setCancelled(true);
 			return;
 		}

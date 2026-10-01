@@ -279,7 +279,7 @@ public class Node {
 			return false;
 		}
 		if(NodeManager.getNodeAmount(g)-NodeManager.getNodeCapacity(g) >= 0 && !block.isSpecial()) {
-			p.sendMessage("§cYou are already filled your node capacity!");
+			p.sendMessage("§cYour guild has already filled its node capacity!");
 			return false;
 		}
 		return true;

@@ -40,7 +40,7 @@ public class ResourceManager implements Listener{
 		String dowsingId = Cache.dowsingStick.split("\\.")[1];
 		if(!(nbt.getType().equalsIgnoreCase(dowsingType) && nbt.getString("MMOITEMS_ITEM_ID").equalsIgnoreCase(dowsingId))) return;
 		if(!Cache.naturalYieldEnabled) {
-			p.sendMessage("§cNatural yields are disabled");
+			p.sendMessage("§cYour dowsing stick does not stir.");
 			return;
 		}
 		if(db.hasResource(p.getLocation().getChunk())) {
@@ -51,7 +51,7 @@ public class ResourceManager implements Listener{
 			if(yield > 3) color = "YELLOW";
 			if(yield > 5) color = "GREEN";
 			if(yield > 7) color = "DARK_GREEN";
-			p.sendMessage("§fThis chunk has resources of the type: §e"+resource.replace("_", " ")+" §fin it, with a yield of "+ChatColor.valueOf(color) + yield);
+			p.sendMessage("§fThis land holds §e"+resource.replace("_", " ")+"§f, with a yield of "+ChatColor.valueOf(color) + yield);
 		} else {
 			p.sendMessage("§7Nothing found here");
 		}
