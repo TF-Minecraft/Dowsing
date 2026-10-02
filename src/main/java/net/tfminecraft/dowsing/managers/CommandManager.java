@@ -24,6 +24,10 @@ public class CommandManager implements Listener, CommandExecutor{
 				sender.sendMessage("§cYou do not have access to this command!");
 				return false;
 			}
+            if (args.length == 0) {
+                sender.sendMessage("§eUsage: /dowsing <reload|createresource|deleteresource>");
+                return false;
+            }
 			if(args[0].equalsIgnoreCase("reload")) {
 				if(sender instanceof Player) {
 					Player p = (Player) sender;
@@ -35,6 +39,10 @@ public class CommandManager implements Listener, CommandExecutor{
 			if(sender instanceof Player) {
 				Player p = (Player) sender;
 				if(args[0].equalsIgnoreCase("createresource")) {
+                    if (args.length < 4) {
+                        sender.sendMessage("§eUsage: /dowsing createresource <id> <material> <yield>");
+                        return false;
+                    }
 					String id = args[1];
 					String line = args[2]+"."+args[3];
 					try {
@@ -45,6 +53,10 @@ public class CommandManager implements Listener, CommandExecutor{
 						e.printStackTrace();
 					}
 				} else if(args[0].equalsIgnoreCase("deleteresource")) {
+                    if (args.length < 2) {
+                        sender.sendMessage("§eUsage: /dowsing deleteresource <id>");
+                        return false;
+                    }
 					String id = args[1];
 					db.removeResource(id);
 					p.sendMessage("§eResource deleted");

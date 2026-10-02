@@ -11,6 +11,20 @@ import org.junit.jupiter.api.Test;
 
 class LastCycleResultTest {
 
+    @Test
+    @SuppressWarnings("unchecked")
+    void invalidEntriesAreDiscardedAndLegacyTextAmountsAreRead() {
+        Map<String,Integer> input = new LinkedHashMap<>();
+        input.put(null, 1); input.put(" ", 2); input.put("null", null);
+        input.put("negative", -1); input.put("zero", 0); input.put("valid", 3);
+        assertEquals(Map.of("valid", 3), LastCycleResult.toJson(input));
+        JSONObject data = new JSONObject();
+        data.put(null, 3); data.put("nil", null); data.put("invalid", "bad");
+        data.put("legacy", "2.6"); data.put("negative", "-1");
+        assertEquals(Map.of("legacy", 3), LastCycleResult.fromJson(data));
+        assertTrue(LastCycleResult.fromJson("unexpected").isEmpty());
+    }
+
 	@Test
 	void roundTripsExtractedItems() {
 		Map<String, Integer> extracted = new LinkedHashMap<>();

@@ -304,6 +304,7 @@ public class Node {
 		this.cycleTime = 0;
 		this.currentType = b.getTypes().get(0);
 		this.upkeep = 0.0;
+		this.naturalYield = 0;
 		try {
 			this.naturalYield = getNaturalYieldFromChunk(this.currentType.getResource(), this.loc);
 		} catch (IOException e) {
@@ -601,13 +602,7 @@ public class Node {
 		return 0.0;
 	}
 	public int getCapacity() {
-		int capacity = 1;
-		if(Cache.extraCapacity && resolveGuild() != null) {
-			int members = this.guild.getMembers().size();
-			int added = (int) Math.floorDiv(members, Cache.membersPerCapacity);
-			capacity = capacity+added+NodeManager.getExtraCapacity(this.guild);
-		}
-		return capacity;
+		return NodeManager.getNodeCapacity(resolveGuild());
 	}
 	void setCompleteDrops() {
 		this.completeDrop.clear();

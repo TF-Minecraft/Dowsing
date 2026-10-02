@@ -3,13 +3,9 @@ package net.tfminecraft.dowsing.utils;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileNotFoundException;
-import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -43,93 +39,71 @@ import net.tfminecraft.simplefactions.objects.Faction;
 
 @SuppressWarnings("deprecation") // Stored configuration text uses Bukkit legacy color codes.
 public class Database {
-	private JSONObject json; // org.json.simple
+    private JSONObject json = new JSONObject(); // org.json.simple
     JSONParser parser = new JSONParser();
+    private File[] listFiles(File directory) {
+        File[] files = directory.listFiles();
+        return files == null ? new File[0] : files;
+    }
 	public String getResource(Chunk c) throws IOException {
-		File folder = new File("plugins/Dowsing/Resources");
-    	for (final File file : folder.listFiles()) {
-            if (!file.isDirectory()) {
-            	try {
-        	  	      FileReader myReader = new FileReader(file);
-        	  	      BufferedReader myBufferedReader = new BufferedReader(myReader);
-        	  	      
-        	  	      String line = myBufferedReader.readLine();
-	        	  	    if(line.equalsIgnoreCase(c.toString())) {
-	        	  	    	String r = myBufferedReader.readLine();
-	        	  	    	myReader.close(); 
-	                		return r;
+        File folder = new File(DowsingMain.plugin.getDataFolder(), "Resources");
+        for (File file : listFiles(folder)) {
+            if (file.isDirectory()) continue;
+            try (BufferedReader reader = java.nio.file.Files.newBufferedReader(file.toPath())) {
+                if (c.toString().equalsIgnoreCase(reader.readLine())) {
+                    String resource = reader.readLine();
+                    if (resource != null && !resource.isBlank()) return resource;
 	                	}
-        	  	      myReader.close();   
-        	  	    } catch (FileNotFoundException e) {
+            } catch (FileNotFoundException | java.nio.file.NoSuchFileException e) {
                   DowsingMain.plugin.getLogger().log(Level.WARNING, "Could not read resource file " + file, e);
-        	  	    }
             }
     	}
 		return null;
 	}
 	public Boolean hasResource(Chunk c) throws IOException {
-		File folder = new File("plugins/Dowsing/Resources");
-    	for (final File file : folder.listFiles()) {
-            if (!file.isDirectory()) {
-            	try {
-        	  	      FileReader myReader = new FileReader(file);
-        	  	      BufferedReader myBufferedReader = new BufferedReader(myReader);
-        	  	      
-        	  	      String line = myBufferedReader.readLine();
-        	  	      myReader.close();   
-	        	  	    if(line.equalsIgnoreCase(c.toString())) {
-	                		return true;
-	                	}
-        	  	    } catch (FileNotFoundException e) {
-                  DowsingMain.plugin.getLogger().log(Level.WARNING, "Could not read resource file " + file, e);
-        	  	    }
-            }
-    	}
-		return false;
+        return getResource(c) != null;
 	}
 	public Boolean removeResource(String id){
-		File folder = new File("plugins/Dowsing/Resources");
-    	for (final File file : folder.listFiles()) {
+        File folder = new File(DowsingMain.plugin.getDataFolder(), "Resources");
+        for (final File file : listFiles(folder)) {
             if (!file.isDirectory()) {
             	if(file.getName().equalsIgnoreCase(id+".txt")) {
-            		file.delete();
+                    return file.delete();
             	}
             }
     	}
 		return false;
 	}
 	public void saveResource(String id, String c, String r) throws IOException {
-		File file = new File("plugins/Dowsing/Resources/"+id+".txt");
-		if(file.exists()) {
-			file.delete();
-			file.createNewFile();
+        File folder = new File(DowsingMain.plugin.getDataFolder(), "Resources");
+        java.nio.file.Files.createDirectories(folder.toPath());
+        java.nio.file.Path root = folder.toPath().toAbsolutePath().normalize();
+        java.nio.file.Path path = root.resolve(id + ".txt").normalize();
+        if (!path.startsWith(root)) {
+            throw new IOException("Resource ID must remain inside Resources");
+        }
+        try (BufferedWriter writer = java.nio.file.Files.newBufferedWriter(path)) {
+            writer.write(c); writer.newLine(); writer.write(r); writer.newLine();
 		}
-		FileWriter fileWriter = new FileWriter(file);
-        BufferedWriter myWriter = new BufferedWriter(fileWriter);
-        myWriter.write(c);
-        myWriter.newLine();
-        myWriter.write(r);
-        myWriter.newLine();
-        myWriter.close();
 	}
 	public void loadNodes() {
-		File folder = new File("plugins/Dowsing/Nodes");
-    	for (final File file : folder.listFiles()) {
+        File folder = new File(DowsingMain.plugin.getDataFolder(), "Nodes");
+        for (final File file : listFiles(folder)) {
             if (!file.isDirectory()) {
-            	try {
-    				json = (JSONObject) parser.parse(new InputStreamReader(new FileInputStream(file), "UTF-8"));
-    				Location loc = new Location(Bukkit.getServer().getWorld((String) json.get("world")), (Double) json.get("xPos"),(Double) json.get("yPos"),(Double) json.get("zPos"));
+                try (var reader = java.nio.file.Files.newBufferedReader(file.toPath())) {
+                    json = (JSONObject) parser.parse(reader);
+                    Location loc = new Location(Bukkit.getServer().getWorld((String) json.get("world")), ((Number) json.get("xPos")).doubleValue(),((Number) json.get("yPos")).doubleValue(),((Number) json.get("zPos")).doubleValue());
     				UUID id = UUID.fromString((String) json.get("id"));
     				NodeBlock b = BlockLoader.getByString((String) json.get("block"));
     				if(b == null) continue;
     				Guild g = resolveOwner(json);
     				Boolean isActive = Boolean.parseBoolean((String) json.get("active"));
-    				int level = (int) Math.round((Double) json.get("level"));
-    				int cycleTime = (int) Math.round((Double) json.get("cycle time"));
-    				int timeLeft = (int) Math.round((Double) json.get("time remaining"));
-    				int inputCounter = (int) Math.round((Double) json.get("input counter"));
+                    int level = (int) Math.round(((Number) json.get("level")).doubleValue());
+                    int cycleTime = (int) Math.round(((Number) json.get("cycle time")).doubleValue());
+                    int timeLeft = (int) Math.round(((Number) json.get("time remaining")).doubleValue());
+                    int inputCounter = (int) Math.round(((Number) json.get("input counter")).doubleValue());
     				NodeType currentType = TypeLoader.getByString((String) json.get("current type"));
-					double efficiency = json.containsKey("efficiency") ? (Double) json.get("efficiency") : 50;
+                    double efficiency = json.containsKey("efficiency") ? ((Number) json.get("efficiency")).doubleValue() : 50;
     				if(currentType == null) continue;
     				List<String> activePMs = new ArrayList<String>();
     				int i = 0;
@@ -183,12 +157,12 @@ public class Database {
 	}
 
 	public void loadGuildCapacity() {
-		File file = new File("plugins/Dowsing/guild_capacity.json");
+        File file = new File(DowsingMain.plugin.getDataFolder(), "guild_capacity.json");
 		if(!file.exists()) {
 			return;
 		}
-		try {
-			JSONObject data = (JSONObject) parser.parse(new InputStreamReader(new FileInputStream(file), "UTF-8"));
+        try (var reader = java.nio.file.Files.newBufferedReader(file.toPath())) {
+            JSONObject data = (JSONObject) parser.parse(reader);
 			for(Object key : data.keySet()) {
 				Object value = data.get(key);
 				int extra = 0;
@@ -206,7 +180,8 @@ public class Database {
 
 	public void saveGuildCapacity() {
 		try {
-			File file = new File("plugins/Dowsing/guild_capacity.json");
+            File file = new File(DowsingMain.plugin.getDataFolder(), "guild_capacity.json");
+            java.nio.file.Files.createDirectories(file.getParentFile().toPath());
 			file.createNewFile();
 			HashMap<String, Object> defaults = new HashMap<String, Object>();
 			for(String key : NodeManager.extraCapacityByGuild.keySet()) {
@@ -220,8 +195,8 @@ public class Database {
 	}
 
 	public void deleteDatabase() {
-    	File folder = new File("plugins/Dowsing/Nodes");
-    	for (final File file : folder.listFiles()) {
+        File folder = new File(DowsingMain.plugin.getDataFolder(), "Nodes");
+        for (final File file : listFiles(folder)) {
             if (!file.isDirectory()) {
             	file.delete();
             }
@@ -230,17 +205,12 @@ public class Database {
 	@SuppressWarnings("unchecked")
 	public void saveNode(Node n) {
 		try {
-			File file = new File("plugins/Dowsing/Nodes",n.getId()+".json");
-			file.createNewFile();
-        	PrintWriter pw = new PrintWriter(file, "UTF-8");
-        	pw.print("{");
-        	pw.print("}");
-        	pw.flush();
-        	pw.close();
+            File file = new File(new File(DowsingMain.plugin.getDataFolder(), "Nodes"),n.getId()+".json");
+            java.nio.file.Files.createDirectories(file.getParentFile().toPath());
             HashMap<String, Object> defaults = new HashMap<String, Object>();
-        	json = (JSONObject) parser.parse(new InputStreamReader(new FileInputStream(file), "UTF-8"));
+            json = new JSONObject();
         	defaults.put("id", n.getId().toString());
-        	defaults.put("world", n.getLoc().getWorld().toString().replace("CraftWorld{name=", "").replace("}", ""));
+            defaults.put("world", n.getLoc().getWorld().getName());
         	defaults.put("xPos", n.getLoc().getX());
         	defaults.put("yPos", n.getLoc().getY());
         	defaults.put("zPos", n.getLoc().getZ());

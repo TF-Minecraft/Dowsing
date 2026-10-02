@@ -92,10 +92,26 @@ public class NodeEngine {
 				inputs.put(key, amount);
 			}
 		}
-		n.setInputCounter(n.getInputCounter()-1);
-		for(String key : inputs.keySet()) {
-			addItem(key, inputs.get(key), i);
-		}
+        // A refund is one transaction: unresolved items or a full barrel keep
+        // both the inventory and refund credit unchanged for a later retry.
+        java.util.List<ItemStack> refund = new java.util.ArrayList<>();
+        ItemCreator creator = new ItemCreator();
+        for (String key : inputs.keySet()) {
+            ItemStack item = creator.getItemFromPath(key);
+            if (item == null) return;
+            item = item.clone();
+            item.setAmount(inputs.get(key));
+            refund.add(item);
+        }
+        ItemStack[] before = java.util.Arrays.stream(i.getContents())
+            .map(item -> item == null ? null : item.clone()).toArray(ItemStack[]::new);
+        for (ItemStack item : refund) {
+            if (!i.addItem(item).isEmpty()) {
+                i.setContents(before);
+                return;
+            }
+        }
+        n.setInputCounter(n.getInputCounter() - 1);
 	}
 	public void addItem(String path, Integer amount, Inventory i) {
 		ItemCreator ic = new ItemCreator();

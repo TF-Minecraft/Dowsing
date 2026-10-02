@@ -33,7 +33,7 @@ public class BlockLoader {
 			String plugin = b.getBlock().split("\\.")[0];
 			if(!plugin.equalsIgnoreCase("v")) continue;
 			String type = b.getBlock().split("\\.")[1];
-			if(m.equals(Material.valueOf(type.toUpperCase()))) return new NodeBlock(b);
+			if(m.equals(Material.valueOf(type.toUpperCase(java.util.Locale.ROOT)))) return new NodeBlock(b);
 		}
 		return null;
 	}

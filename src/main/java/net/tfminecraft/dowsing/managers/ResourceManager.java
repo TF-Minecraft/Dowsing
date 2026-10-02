@@ -2,7 +2,7 @@ package net.tfminecraft.dowsing.managers;
 
 import java.io.IOException;
 import java.util.HashMap;
-import java.util.List;
+import java.util.Collection;
 
 import org.bukkit.ChatColor;
 import org.bukkit.block.Block;
@@ -57,7 +57,7 @@ public class ResourceManager implements Listener{
 		}
 	}
 	public Boolean clickedIsFurniture( Block b, String station) {
-		List<Entity> nearbyEntities = (List<Entity>) b.getWorld().getNearbyEntities(b.getLocation(), 0.2, 0.2, 0.2);
+		Collection<Entity> nearbyEntities = b.getWorld().getNearbyEntities(b.getLocation(), 0.2, 0.2, 0.2);
 		for(Entity a : b.getWorld().getEntities()){
             if(nearbyEntities.contains(a)){
             	CustomFurniture f = CustomFurniture.byAlreadySpawned(a);

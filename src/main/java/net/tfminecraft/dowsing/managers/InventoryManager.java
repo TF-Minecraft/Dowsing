@@ -200,10 +200,12 @@ public class InventoryManager {
 		i.setItem(15, createGlobe(n));
 		if(NodeManager.canPurchaseCapacity(n.getGuild())) {
 			i.setItem(24, createCapacityButton(n));
+		} else {
+			i.setItem(24, null);
 		}
 		i.setItem(16, createCycle(n));
 		i.setItem(17, createStatus(n));
-		i.setItem(18, createDeleteButton());
+		i.setItem(18, n.getBlock().isBreakable() || Permissions.isAdmin(p) ? createDeleteButton() : null);
 		Integer slot = 0;
 		while(slot < i.getSize()) {
 			if(i.getItem(slot) == null) {
