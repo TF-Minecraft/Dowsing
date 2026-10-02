@@ -1,6 +1,7 @@
 package net.tfminecraft.dowsing.managers;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -128,9 +129,9 @@ public class NodeManager implements Listener{
 			if(added > Cache.maxMemberCapacity) {
 				added = Cache.maxMemberCapacity;
 			}
-			capacity = capacity+added+getExtraCapacity(g);
+			capacity = capacity+added;
 		}
-		return capacity;
+		return capacity+getExtraCapacity(g);
 	}
 	public Node getByLocation(Location loc) {
 		for(Node n : nodes) {
@@ -139,7 +140,7 @@ public class NodeManager implements Listener{
 		return null;
 	}
 	public String getClickedFurniture(Block b) {
-		List<Entity> nearbyEntities = (List<Entity>) b.getWorld().getNearbyEntities(b.getLocation(), 0.2, 0.2, 0.2);
+		Collection<Entity> nearbyEntities = b.getWorld().getNearbyEntities(b.getLocation(), 0.2, 0.2, 0.2);
 		for(Entity a : b.getWorld().getEntities()){
             if(nearbyEntities.contains(a)){
             	CustomFurniture f = CustomFurniture.byAlreadySpawned(a);
@@ -230,12 +231,14 @@ public class NodeManager implements Listener{
 			Node n = nodes.get(i);
 			if(!n.getLoc().getBlock().getType().equals(Material.BARRIER)) {
 				n.breakNode();
-				nodes.remove(i);
+				nodes.remove(i--);
 			}
 		}
 	}
 	public void confirmClick(Player p, Node n, ConfirmType t) {
 		if(t != ConfirmType.DEACTIVATE && blockPendingRefund(p, n)) return;
+		if(t != ConfirmType.DEACTIVATE && blockActiveChange(p, n,
+				t == ConfirmType.DELETE_NODE ? "delete node" : "change type")) return;
 		if(t.equals(ConfirmType.DEACTIVATE)) {
 			boolean wasActive = n.getIsActive();
 			n.deActivate();
@@ -260,10 +263,26 @@ public class NodeManager implements Listener{
 			inv.nodeView(p, n);
 			currentNode.put(p, n);
 		}
+		confirm.remove(p);
 	}
 	private boolean blockPendingRefund(Player p, Node n) {
 		if(!n.hasPendingRefund()) return false;
 		p.sendMessage("§cRestore the barrel and hopper, then click Retry Refund before changing this node.");
+		return true;
+	}
+	private boolean canManageNode(Player p, Node n) {
+		if(p.hasPermission("dowsing.admin")) return true;
+		Guild memberGuild = FactionManager.getGuildByMember(p.getName());
+		Guild owner = n.getGuild();
+		if(memberGuild != null && owner != null && owner.getId().equalsIgnoreCase(memberGuild.getId())) return true;
+		p.sendMessage("§cCannot change another guild's node");
+		p.playSound(p.getLocation(), Sound.ENTITY_VILLAGER_NO, 1f, 1f);
+		return false;
+	}
+	private boolean blockActiveChange(Player p, Node n, String action) {
+		if(!n.getIsActive()) return false;
+		p.sendMessage("§cCannot "+action+" while node is active");
+		p.playSound(p.getLocation(), Sound.ENTITY_VILLAGER_NO, 1f, 1f);
 		return true;
 	}
 	@EventHandler(ignoreCancelled = true)
@@ -407,11 +426,7 @@ public class NodeManager implements Listener{
 				return;
 			}
 			Guild g = FactionManager.getGuildByMember(p.getName());
-			if(!p.hasPermission("dowsing.admin") && (g == null || n.getGuild() == null || !n.getGuild().getId().equalsIgnoreCase(g.getId()))) {
-				p.sendMessage("§cCannot change another guild's node");
-				p.playSound(p.getLocation(), Sound.ENTITY_VILLAGER_NO, 1f, 1f);
-				return;
-			}
+			if(!canManageNode(p, n)) return;
 			if(e.getSlot() != 17 && blockPendingRefund(p, n)) return;
 			if(e.getSlot() == 8) {
 				if(n.getIsActive()) {
@@ -517,6 +532,8 @@ public class NodeManager implements Listener{
 				return;
 			}
 			NodeSlot slot = currentSlot.get(p);
+			if(!canManageNode(p, n)) return;
+			if(blockActiveChange(p, n, "change production methods")) return;
 			ItemStack i = e.getCurrentItem();
 			if(i == null) return;
 			ProductionMethod pm = PMLoader.getByItemName(i.getItemMeta().getDisplayName());
@@ -553,6 +570,8 @@ public class NodeManager implements Listener{
 				p.playSound(p.getLocation(), Sound.BLOCK_NOTE_BLOCK_BIT, 1f, 1f);
 				return;
 			}
+			if(!canManageNode(p, n)) return;
+			if(blockActiveChange(p, n, "change type")) return;
 			ItemStack i = e.getCurrentItem();
 			if(i == null) return;
 			NodeType t = TypeLoader.getByItemName(i.getItemMeta().getDisplayName());
@@ -582,10 +601,10 @@ public class NodeManager implements Listener{
 				return;
 			}
 			if(!confirm.containsKey(p)) return;
+			if(e.getSlot() == 11 && !canManageNode(p, n)) return;
 			p.playSound(p.getLocation(), Sound.BLOCK_NOTE_BLOCK_BIT, 1f, 1f);
 			if(e.getSlot() == 11) {
 				confirmClick(p, n, confirm.get(p));
-				confirm.remove(p);
 			} else if(e.getSlot() == 15) {
 				inv.nodeView(p, n);
 				currentNode.put(p, n);

@@ -14,7 +14,7 @@ public class TabCompletion implements TabCompleter{
     @Override
     public List<String> onTabComplete (CommandSender sender, Command cmd, String label, String[] args){
     	if(Permissions.isAdmin(sender)) {
-	        if(cmd.getName().equalsIgnoreCase("dowsing") && args.length >= 0 && args.length < 2 && !(args[0].equalsIgnoreCase("reload") || args[0].equalsIgnoreCase("createresource") || args[0].equalsIgnoreCase("deleteresource"))){
+	        if(cmd.getName().equalsIgnoreCase("dowsing") && args.length < 2 && (args.length == 0 || !(args[0].equalsIgnoreCase("reload") || args[0].equalsIgnoreCase("createresource") || args[0].equalsIgnoreCase("deleteresource")))){
 	            if(sender instanceof Player){
 	                List<String> completions = new ArrayList<>();
 	                
@@ -54,8 +54,10 @@ public class TabCompletion implements TabCompleter{
 	        }else if(cmd.getName().equalsIgnoreCase("dowsing") && args.length == 2 && args[0].equalsIgnoreCase("deleteresource")){
 	            if(sender instanceof Player){
 	            	List<String> completions = new ArrayList<String>();
-	            	File folder = new File("plugins/Dowsing/Resources");
-	            	for (final File file : folder.listFiles()) {
+                File folder = new File(net.tfminecraft.dowsing.DowsingMain.plugin.getDataFolder(), "Resources");
+                File[] files = folder.listFiles();
+                    if (files == null) return completions;
+                    for (final File file : files) {
 	                    if (!file.isDirectory()) {
 	                    	String id = new String(file.getName());
 	                    	id = id.replace(".txt", "");

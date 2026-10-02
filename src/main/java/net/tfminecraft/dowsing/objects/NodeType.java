@@ -102,7 +102,10 @@ public class NodeType {
 		this.timer = config.getInt("timer");
 		this.resource = config.getString("resource");
 		this.timeNaturalYield = config.getDouble("time-reduction-per-natural-yield");
-		this.yieldNaturalYield = config.getInt("natural-yield-per-yield");
+		this.yieldNaturalYield = config.getInt("natural-yield-per-yield", 1);
+		if (this.yieldNaturalYield <= 0) {
+			throw new IllegalArgumentException("natural-yield-per-yield must be positive for " + key);
+		}
 		ItemCreator ic = new ItemCreator();
 		this.menuItem = ic.createTypeItemConfig(config.getConfigurationSection("item"));
 		List<NodeSlot> slotList = new ArrayList<NodeSlot>();
@@ -145,7 +148,6 @@ public class NodeType {
 		for(Level l : another.levels) {
 			this.levels.add(new Level(l));
 		}
-		this.levels = another.levels;
 		this.maxLevel = another.maxLevel;
 		this.drops = another.drops;
 	}

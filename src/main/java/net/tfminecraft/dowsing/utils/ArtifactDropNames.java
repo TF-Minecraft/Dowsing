@@ -8,7 +8,7 @@ public final class ArtifactDropNames {
 	private ArtifactDropNames() {}
 
 	public static boolean isMagicPath(String path) {
-		return path != null && path.toLowerCase().startsWith("magic.");
+		return path != null && path.toLowerCase(java.util.Locale.ROOT).startsWith("magic.");
 	}
 
 	public static String label(String path) {

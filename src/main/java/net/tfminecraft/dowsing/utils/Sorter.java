@@ -18,7 +18,7 @@ public class Sorter {
 		    		return 0;
 		    	}
 		    	if(f2.getWeight() == null) {
-		    		Bukkit.getLogger().info("[Dowsing] "+f1.getId()+" has no weight");
+                    Bukkit.getLogger().info("[Dowsing] "+f2.getId()+" has no weight");
 		    		return 0;
 		    	}
 		        return Double.compare(f1.getWeight(), f2.getWeight());

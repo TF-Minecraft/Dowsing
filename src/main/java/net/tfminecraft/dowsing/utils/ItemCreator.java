@@ -130,7 +130,7 @@ public class ItemCreator {
 		List<String> lore = new ArrayList<String>();
 		ItemMeta m = i.getItemMeta();
 		m.setDisplayName(t.getName());
-		if(n.getModifiedTime() != t.getTimer()) {
+		if(!n.getModifiedTime().equals(t.getTimer())) {
 			lore.add("§eTime: §f"+formatTime(n.getModifiedTime())+" §7(from "+formatTime(t.getTimer())+")");
 		} else {
 			lore.add("§eTime: §f"+formatTime(n.getModifiedTime()));
@@ -181,7 +181,7 @@ public class ItemCreator {
 		}
 		Integer oldYield = 0;
 		Double oldYieldPercent = 0.0;
-		Integer oldPrestige = 0;
+		Double oldPrestige = 0.0;
 		Integer oldExtraction = 0;
 		Double oldTime = 0.0;
 		Double oldUpkeep = 0.0;
@@ -194,7 +194,7 @@ public class ItemCreator {
 			} else if(t.equalsIgnoreCase("time_modifier")) {
 				oldTime = Double.parseDouble(s.split("\\(")[1].replace(")", ""));
 			} else if(t.equalsIgnoreCase("prestige")) {
-				oldPrestige = Integer.parseInt(s.split("\\(")[1].replace(")", ""));
+				oldPrestige = Double.parseDouble(s.split("\\(")[1].replace(")", ""));
 			} else if(t.equalsIgnoreCase("extraction")) {
 				oldExtraction = Integer.parseInt(s.split("\\(")[1].replace(")", ""));
 			} else if(t.equalsIgnoreCase("upkeep")) {
@@ -203,7 +203,7 @@ public class ItemCreator {
 		}
 		Integer newYield = 0;
 		Double newYieldPercent = 0.0;
-		Integer newPrestige = 0;
+		Double newPrestige = 0.0;
 		Integer newExtraction = 0;
 		Double newTime = 0.0;
 		Double newUpkeep = 0.0;
@@ -217,7 +217,7 @@ public class ItemCreator {
 			if(t.equalsIgnoreCase("time_modifier")) {
 				newTime = Double.parseDouble(s.split("\\(")[1].replace(")", ""));
 			} else if(t.equalsIgnoreCase("prestige")) {
-				newPrestige = Integer.parseInt(s.split("\\(")[1].replace(")", ""));
+				newPrestige = Double.parseDouble(s.split("\\(")[1].replace(")", ""));
 			} else if(t.equalsIgnoreCase("extraction")) {
 				newExtraction = Integer.parseInt(s.split("\\(")[1].replace(")", ""));
 			} else if(t.equalsIgnoreCase("upkeep")) {
@@ -225,7 +225,13 @@ public class ItemCreator {
 			}
 		}
 		if(newPrestige > 0 || oldPrestige > 0) {
-			list.add(oldNewInteger(oldPrestige, newPrestige, "§9Prestige", false));
+			String prestige = "§9Prestige: ";
+			if (Double.compare(oldPrestige, newPrestige) == 0) {
+				list.add(prestige + "§f" + formatYieldPercent(oldPrestige));
+			} else {
+				list.add(prestige + (newPrestige > oldPrestige ? "§a" : "§c")
+					+ formatYieldPercent(oldPrestige) + "->" + formatYieldPercent(newPrestige));
+			}
 		}
 		list.add(oldNewInteger(oldYield, newYield, "§eBase Yield", false));
 		if(Double.compare(newYieldPercent, 0.0) != 0 || Double.compare(oldYieldPercent, 0.0) != 0) {
@@ -254,7 +260,7 @@ public class ItemCreator {
 	}
 	public String oldNewInteger(Integer old, Integer n, String t, Boolean reverse) {
 		String s = "";
-		if(n == old) {
+		if(n.equals(old)) {
 			s = t+": §f"+old;
 		} else if(n > old) {
 			if(reverse) {
@@ -382,12 +388,12 @@ public class ItemCreator {
 				s = s+"§c"+formatYieldPercent(amount)+"%";
 			}
 		} else if(type.equalsIgnoreCase("prestige")) {
-			Integer amount = Integer.parseInt(effect);
+			Double amount = Double.parseDouble(effect);
 			s = "§9Prestige: ";
 			if(amount > 0) {
-				s = s+"§f+"+amount;
+				s = s+"§f+"+formatYieldPercent(amount);
 			} else {
-				s = s+"§c"+amount;
+				s = s+"§c"+formatYieldPercent(amount);
 			}
 		} else if(type.equalsIgnoreCase("extraction")) {
 			Integer amount = Integer.parseInt(effect);
