@@ -12,6 +12,7 @@
     <url>https://github.com/TF-Minecraft/Dowsing</url>
 
     <properties>
+        <denareconomy.version>0.2.4</denareconomy.version>
         <argLine></argLine>
         <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -31,7 +32,7 @@
         <dependency>
             <groupId>net.tfminecraft</groupId>
             <artifactId>denareconomy</artifactId>
-            <version>0.2.4</version>
+            <version>${denareconomy.version}</version>
             <!-- SimpleFactions Bank signatures expose this server-provided API. -->
             <scope>provided</scope>
             <exclusions>

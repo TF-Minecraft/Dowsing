@@ -75,6 +75,13 @@ class DatabaseTest {
         when(DowsingMain.plugin.getDataFolder()).thenReturn(blocked.toFile());
         assertDoesNotThrow(db::saveGuildCapacity);
     }
+    @Test void resourceIdsCannotEscapeTheirDirectory() throws Exception {
+        Path sibling=Files.writeString(root.resolve("outside.txt"),"keep");
+        assertThrows(IOException.class,()->db.saveResource("../outside","chunk","iron.1"));
+        assertEquals("keep",Files.readString(sibling));
+        assertThrows(IOException.class,()->db.saveResource(sibling.toAbsolutePath().toString().replace(".txt",""),"chunk","iron.1"));
+        assertEquals("keep",Files.readString(sibling));
+    }
     @Test void ownersPreferGuildAndMigrateLegacyFaction() {
         Guild guild = mock(Guild.class); Faction faction = mock(Faction.class);
         when(faction.getOrCreateMainGuild()).thenReturn(guild);

@@ -77,8 +77,12 @@ public class Database {
 	public void saveResource(String id, String c, String r) throws IOException {
         File folder = new File(DowsingMain.plugin.getDataFolder(), "Resources");
         java.nio.file.Files.createDirectories(folder.toPath());
-        File file = new File(folder, id + ".txt");
-        try (BufferedWriter writer = java.nio.file.Files.newBufferedWriter(file.toPath())) {
+        java.nio.file.Path root = folder.toPath().toAbsolutePath().normalize();
+        java.nio.file.Path path = root.resolve(id + ".txt").normalize();
+        if (!path.startsWith(root)) {
+            throw new IOException("Resource ID must remain inside Resources");
+        }
+        try (BufferedWriter writer = java.nio.file.Files.newBufferedWriter(path)) {
             writer.write(c); writer.newLine(); writer.write(r); writer.newLine();
 		}
 	}
