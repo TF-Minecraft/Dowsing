@@ -12,11 +12,11 @@
     <url>https://github.com/TF-Minecraft/Dowsing</url>
 
     <properties>
-        <denareconomy.version>0.2.4</denareconomy.version>
-        <argLine></argLine>
         <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.proc>full</maven.compiler.proc>
+        <argLine></argLine>
+        <denareconomy.version>0.2.4</denareconomy.version>
         <magic.version>0.2.0</magic.version>
         <simplefactions.version>3.0.1</simplefactions.version>
         <tlibs.version>2.0.0</tlibs.version>
