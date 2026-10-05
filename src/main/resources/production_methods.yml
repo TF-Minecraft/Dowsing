@@ -106,7 +106,7 @@ artifact_focus:
         material: m.loot.staff_runestone
     effects:
         - prestige(8)
-        - time_modifier(200)
+        - time_modifier(100)
         - upkeep(10)
         - add_drop(magic.(rarity=common),70)
         - add_drop(magic.(rarity=uncommon),20)
