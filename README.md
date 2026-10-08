@@ -31,12 +31,16 @@ Technical documentation is maintained in [TF-Minecraft/Docs](https://github.com/
 
 ## Tests and coverage
 
-Run `mvn clean verify` with Java 21. The build runs the unit tests and enforces
+With Java 21 and the pinned plugin dependencies installed, run `mvn clean verify`.
+The suite uses JUnit 5, Mockito, and MockBukkit. The build enforces
 100% executable runtime **line coverage** with JaCoCo, without production-class
 exclusions. Instruction and branch coverage are reported separately.
 
-The HTML report is `target/site/jacoco/index.html`; the machine-readable report is
-`target/site/jacoco/jacoco.xml`. CI uploads these reports alongside test results.
+Surefire test results are in `target/surefire-reports/`. The HTML coverage report
+is `target/site/jacoco/index.html`; the XML report is
+`target/site/jacoco/jacoco.xml`. CI uploads the test and coverage reports.
+The suite does not validate live furniture interactions, client effects, or the
+complete server plugin stack.
 
 ## License
 
