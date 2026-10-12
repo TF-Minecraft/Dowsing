@@ -23,12 +23,12 @@ import dev.lone.itemsadder.api.CustomFurniture;
 
 class CommandAndResourceTest {
     @TempDir Path root;
-    Player player; Command command; Database db; DowsingMain previous;
+    Player player; Command command; Database db; DowsingMain previous; World world;
     @BeforeEach void setup() {
         previous=DowsingMain.plugin; DowsingMain.plugin=mock(DowsingMain.class);
         when(DowsingMain.plugin.getDataFolder()).thenReturn(root.toFile());
         player=mock(Player.class); when(player.hasPermission(Permissions.Permission_Admin)).thenReturn(true);
-        World world=mock(World.class); Chunk chunk=mock(Chunk.class); when(chunk.toString()).thenReturn("Chunk");
+        world=mock(World.class); Chunk chunk=mock(Chunk.class); when(chunk.toString()).thenReturn("Chunk");
         when(world.getChunkAt(anyInt(),anyInt())).thenReturn(chunk); when(world.getChunkAt(any(Location.class))).thenReturn(chunk); when(player.getLocation()).thenReturn(new Location(world,0,64,0));
         command=mock(Command.class); when(command.getName()).thenReturn("dowsing"); db=mock(Database.class);
     }
