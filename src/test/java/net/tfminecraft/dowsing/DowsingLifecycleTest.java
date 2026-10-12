@@ -68,7 +68,8 @@ class DowsingLifecycleTest {
             plugin.onFactionsReady(new net.tfminecraft.simplefactions.events.SimpleFactionsReadyEvent());
             assertTrue(plugin.nodesReady()); plugin.tryStartNodes(); verify(plugin.db).loadNodes();
             when(plugin.payments().blocked()).thenReturn(true); assertFalse(plugin.nodesReady());
-            plugin.tryStartNodes(); plugin.onDisable(); verify(plugin.db,never()).saveNodes(any());
+            plugin.tryStartNodes(); managers.verify(NodeManager::requestNodeBenefitSync, times(2));
+            plugin.onDisable(); verify(plugin.db,never()).saveNodes(any());
         }
     }
 }

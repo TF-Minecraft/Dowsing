@@ -88,11 +88,12 @@ public class DowsingMain extends JavaPlugin implements Listener {
 			db.loadNodes();
 			nodesLoaded = true;
 		}
-		if ((!managersStarted || payments.blocked()) && !payments.recover()) return;
-		if (managersStarted) return;
-		managersStarted = true;
+		if (managersStarted && !payments.blocked()) return;
+		if (!payments.recover()) return;
 		Ledger.setNodeUpkeepLookup(NodeManager::getTotalUpkeep);
 		NodeManager.requestNodeBenefitSync();
+		if (managersStarted) return;
+		managersStarted = true;
 		startManagers();
 	}
 	@Override
