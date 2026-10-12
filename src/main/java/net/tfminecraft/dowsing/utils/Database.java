@@ -4,7 +4,6 @@ import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileNotFoundException;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -178,19 +177,20 @@ public class Database {
 		}
 	}
 
-	public void saveGuildCapacity() {
+	public boolean saveGuildCapacity() {
 		try {
             File file = new File(DowsingMain.plugin.getDataFolder(), "guild_capacity.json");
             java.nio.file.Files.createDirectories(file.getParentFile().toPath());
-			file.createNewFile();
+
 			HashMap<String, Object> defaults = new HashMap<String, Object>();
 			for(String key : NodeManager.extraCapacityByGuild.keySet()) {
 				defaults.put(key, NodeManager.extraCapacityByGuild.get(key));
 			}
 			json = new JSONObject();
-			save(file, defaults);
+			return save(file, defaults);
 		} catch (Throwable ex) {
 			ex.printStackTrace();
+			return false;
 		}
 	}
 
@@ -202,8 +202,21 @@ public class Database {
             }
     	}
     }
+	/** Save first, then remove nodes absent from the successfully persisted snapshot. */
+	public boolean saveNodes(List<Node> nodes) {
+		for (Node node : nodes) if (!saveNode(node)) return false;
+		java.util.Set<String> names = new java.util.HashSet<>();
+		for (Node node : nodes) names.add(node.getId() + ".json");
+		File folder = new File(DowsingMain.plugin.getDataFolder(), "Nodes");
+		for (File file : listFiles(folder)) {
+			if (file.isFile() && file.getName().matches("[0-9a-fA-F-]{36}\\.json") && !names.contains(file.getName())) {
+				if (!file.delete()) return false;
+			}
+		}
+		return true;
+	}
 	@SuppressWarnings("unchecked")
-	public void saveNode(Node n) {
+	public boolean saveNode(Node n) {
 		try {
             File file = new File(new File(DowsingMain.plugin.getDataFolder(), "Nodes"),n.getId()+".json");
             java.nio.file.Files.createDirectories(file.getParentFile().toPath());
@@ -235,9 +248,10 @@ public class Database {
         	defaults.put("active pms", pmArray);
 			defaults.put("efficiency", n.getEfficiency());
 			defaults.put(LastCycleResult.KEY, LastCycleResult.toJson(n.getLastResult()));
-        	save(file, defaults);
+			return save(file, defaults);
         } catch (Throwable ex) {
 			ex.printStackTrace();
+			return false;
         }
 	}
 	@SuppressWarnings("unchecked")
@@ -266,10 +280,7 @@ public class Database {
 	   Gson g = new GsonBuilder().setPrettyPrinting().create();
 	   String prettyJsonString = g.toJson(treeMap);
 	  
-	    FileWriter fw = new FileWriter(file);
-	    fw.write(prettyJsonString);
-	    fw.flush();
-	    fw.close();
+	    DurableFiles.write(file.toPath(), prettyJsonString);
 	  
 	    return true;
 	  } catch (Exception ex) {

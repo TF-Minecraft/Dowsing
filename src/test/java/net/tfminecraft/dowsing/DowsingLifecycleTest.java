@@ -42,11 +42,33 @@ class DowsingLifecycleTest {
             Player player=mock(Player.class);plugin.reloadConfigPCommand(player);verify(player,times(2)).sendMessage(org.mockito.ArgumentMatchers.anyString());
             verify(plugin.configLoader,times(3)).loadConfig(new java.io.File(plugin.getDataFolder(),"config.yml"));
             Node node=mock(Node.class);NodeManager.nodes.add(node);
-            plugin.onDisable();verify(plugin.db).deleteDatabase();verify(plugin.db).saveNode(node);verify(plugin.db).saveGuildCapacity();
+            plugin.onDisable();verify(plugin.db).saveNodes(NodeManager.nodes);verify(plugin.db).saveGuildCapacity();
             NodeManager.nodes.clear();
             try(var paths=Files.walk(plugin.getDataFolder().toPath())){for(Path path:paths.sorted(Comparator.reverseOrder()).toList())Files.delete(path);}
             plugin.onEnable();assertTrue(Files.isDirectory(plugin.getDataFolder().toPath()));
             MockBukkit.getMock().getPluginManager().disablePlugin(plugin);
+        }
+    }
+
+    @Test void waitingForIdentityNeverLoadsOrSavesNodesThenStartsOnlyOnce() {
+        var api=net.tfminecraft.dowsing.testsupport.FactionFixture.api;
+        api.when(net.tfminecraft.simplefactions.api.SimpleFactionsApi::ready).thenReturn(false);
+        try(var configs=mockConstruction(ConfigLoader.class);var pms=mockConstruction(PMLoader.class);
+            var slots=mockConstruction(SlotLoader.class);var types=mockConstruction(TypeLoader.class);
+            var blocks=mockConstruction(BlockLoader.class);var databases=mockConstruction(Database.class);
+            var ledger=mockStatic(Ledger.class);var managers=mockStatic(NodeManager.class);
+            var payments=mockConstruction(net.tfminecraft.dowsing.utils.NodePayments.class)) {
+            DowsingMain plugin=MockBukkit.load(DowsingMain.class);
+            assertFalse(plugin.nodesReady()); assertNotNull(plugin.payments());
+            plugin.tryStartNodes(); plugin.reloadConfigCommand(); plugin.onDisable();
+            verifyNoInteractions(plugin.db);
+            api.when(net.tfminecraft.simplefactions.api.SimpleFactionsApi::ready).thenReturn(true);
+            plugin.tryStartNodes(); verify(plugin.db).loadNodes(); assertFalse(plugin.nodesReady());
+            when(plugin.payments().recover()).thenReturn(true);
+            plugin.onFactionsReady(new net.tfminecraft.simplefactions.events.SimpleFactionsReadyEvent());
+            assertTrue(plugin.nodesReady()); plugin.tryStartNodes(); verify(plugin.db).loadNodes();
+            when(plugin.payments().blocked()).thenReturn(true); assertFalse(plugin.nodesReady());
+            plugin.tryStartNodes(); plugin.onDisable(); verify(plugin.db,never()).saveNodes(any());
         }
     }
 }

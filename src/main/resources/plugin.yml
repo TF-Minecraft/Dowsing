@@ -4,7 +4,7 @@ name: Dowsing
 version: '${project.version}'
 author: Drefvelin
 
-depend: [TLibs, SimpleFactions, MMOItems, MythicLib, ItemsAdder]
+depend: [TLibs, DenarEconomy, SimpleFactions, MMOItems, MythicLib, ItemsAdder]
 softdepend: [Magic]
 
 commands:

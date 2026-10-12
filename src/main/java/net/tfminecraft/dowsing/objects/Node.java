@@ -29,6 +29,8 @@ import net.tfminecraft.dowsing.utils.DropPaths;
 import net.tfminecraft.dowsing.utils.ItemDropper;
 import net.tfminecraft.dowsing.utils.NodeEngine;
 import net.tfminecraft.simplefactions.guild.Guild;
+import net.tfminecraft.simplefactions.api.SimpleFactionsApi;
+import net.tfminecraft.simplefactions.identity.Members;
 import net.tfminecraft.simplefactions.managers.FactionManager;
 import net.tfminecraft.simplefactions.utils.Formatter;
 import net.tfminecraft.simplefactions.utils.Permissions;
@@ -241,7 +243,7 @@ public class Node {
 		this.costIncrease = costIncrease;
 	}
 	public boolean isClaimable() {
-		return resolveGuild() == null;
+		return SimpleFactionsApi.ready() && resolveGuild() == null;
 	}
 
 	//Efficiency
@@ -250,6 +252,7 @@ public class Node {
 	}
 
 	Guild resolveGuild() {
+		if (!SimpleFactionsApi.ready()) return guild;
 		if(guild == null) {
 			return null;
 		}
@@ -264,7 +267,7 @@ public class Node {
 
 	public boolean canHold(Guild g){
 		if(g == null) return false;
-		Player p = Bukkit.getPlayerExact(g.getLeader());
+		Player p = Members.player(g.getLeader());
 		if(p != null && p.isOnline() && Permissions.isAdmin(p)) return true;
 		if(g.getMembers().size() < Cache.minMembersForNode) return false;
 		if(NodeManager.getNodeAmount(g)-NodeManager.getNodeCapacity(g) > 0) return false;
@@ -357,11 +360,12 @@ public class Node {
 	}
 
 	public void check() {
+		if (!SimpleFactionsApi.ready()) return;
 		if(isClaimable()) return;
 		Guild g = resolveGuild();
 		if(g == null) return;
 		if(canHold(g)) return;
-		Player p = Bukkit.getPlayer(g.getLeader());
+		Player p = Members.player(g.getLeader());
 		if(p != null && p.isOnline()) {
 			p.sendMessage("§cYou lost control of the "+block.getResource()+" Node §c!");
 			p.closeInventory();
