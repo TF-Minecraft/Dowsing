@@ -25,8 +25,11 @@ final class DurableFiles {
             }
             Files.move(temporary, destination, StandardCopyOption.ATOMIC_MOVE,
                     StandardCopyOption.REPLACE_EXISTING);
-            try (FileChannel channel = FileChannel.open(directory, StandardOpenOption.READ)) {
-                channel.force(true);
+            // Include new ancestor entries, even after an earlier failed publication attempt.
+            for (Path parent = directory; parent != null; parent = parent.getParent()) {
+                try (FileChannel channel = FileChannel.open(parent, StandardOpenOption.READ)) {
+                    channel.force(true);
+                }
             }
         } finally {
             Files.deleteIfExists(temporary);
