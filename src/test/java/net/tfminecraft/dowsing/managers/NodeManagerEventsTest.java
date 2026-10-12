@@ -92,10 +92,10 @@ class NodeManagerEventsTest {
     @Test
     void placementRequiresGuildMembershipMinimumMembersAndAvailableCapacity() {
         BlockPlaceEvent event = f.place();
-        f.factions.when(() -> FactionManager.getGuildByMember("Leader")).thenReturn(null);
+        f.factions.when(() -> FactionManager.getGuildByMember(f.player)).thenReturn(null);
         f.manager.placeVanillaNode(event); verify(event).setCancelled(true);
         verify(f.player).sendMessage(contains("need to have a guild"));
-        f.factions.when(() -> FactionManager.getGuildByMember("Leader")).thenReturn(f.guild);
+        f.factions.when(() -> FactionManager.getGuildByMember(f.player)).thenReturn(f.guild);
         Cache.minMembersForNode = 3; event = f.place(); f.manager.placeVanillaNode(event);
         verify(event).setCancelled(true); verify(f.player).sendMessage(contains("at least 3 members"));
         Cache.minMembersForNode = 1; NodeManager.nodes.add(f.nodeAt(f.remoteLocation()));
@@ -168,7 +168,7 @@ class NodeManagerEventsTest {
         NodeManager.nodes.add(f.node); when(f.node.isClaimable()).thenReturn(true);
         PlayerInteractEvent event = f.interact(Action.RIGHT_CLICK_BLOCK);
         f.manager.openNode(event); verify(f.player).sendMessage(contains("Must be a guild leader"));
-        f.factions.when(() -> FactionManager.getGuildByLeader("Leader")).thenReturn(f.guild);
+        f.factions.when(() -> FactionManager.getGuildByLeader(f.player)).thenReturn(f.guild);
         f.manager.openNode(event); verify(f.node, never()).setGuild(any());
         when(f.node.canClaim(f.player, f.guild)).thenReturn(true); f.manager.openNode(event);
         verify(f.node).setGuild(f.guild); verify(f.node).update();
@@ -206,7 +206,7 @@ class NodeManagerEventsTest {
 
     @Test
     void mainMenuRejectsOtherGuildMembersAndLetsAdminsProceed() {
-        f.factions.when(() -> FactionManager.getGuildByMember("Leader")).thenReturn(null);
+        f.factions.when(() -> FactionManager.getGuildByMember(f.player)).thenReturn(null);
         f.manager.invenClick(f.click("§7Iron Node", 9));
         verify(f.player).sendMessage("§cCannot change another guild's node");
         verify(f.lastInventory(), never()).typeView(any(), any());
@@ -269,12 +269,12 @@ class NodeManagerEventsTest {
         when(f.guild.getBank()).thenReturn(f.bank); when(f.bank.getWealth()).thenReturn(10.0);
         f.manager.invenClick(f.click("§7Iron Node", 24)); verify(f.player).sendMessage("§cNot enough funds");
         when(f.bank.getWealth()).thenReturn(100.0);
-        f.manager.invenClick(f.click("§7Iron Node", 24)); verify(f.bank).withdraw(25.0);
+        f.manager.invenClick(f.click("§7Iron Node", 24)); verify(f.payments).change(eq(f.node), eq(f.guild), eq("capacity"), anyInt(), anyInt(), eq(25.0));
         assertEquals(1, NodeManager.getExtraCapacity(f.guild));
         net.tfminecraft.simplefactions.Cache.maxExtraNodeCapacity = 1;
         InventoryClickEvent event = f.click("§7Iron Node", 24); when(event.getCurrentItem()).thenReturn(new ItemStack(Material.NETHER_STAR));
         f.manager.invenClick(event); verify(f.player).sendMessage(contains("maximum extra capacity"));
-        f.manager.invenClick(f.click("§7Iron Node", 24)); verify(f.bank, times(1)).withdraw(25.0);
+        f.manager.invenClick(f.click("§7Iron Node", 24)); verify(f.payments, times(1)).change(eq(f.node), eq(f.guild), eq("capacity"), anyInt(), anyInt(), eq(25.0));
     }
 
     @Test
@@ -290,22 +290,22 @@ class NodeManagerEventsTest {
         assertFalse(NodeManager.canPurchaseCapacity(f.guild));
         f.manager.invenClick(f.click("§7Iron Node", 24));
         assertEquals(3, NodeManager.getNodeCapacity(f.guild));
-        verify(f.bank, times(2)).withdraw(25.0);
+        verify(f.payments, times(2)).change(eq(f.node), eq(f.guild), eq("capacity"), anyInt(), anyInt(), eq(25.0));
     }
 
     @Test
     void upgradeAndDowngradeChargeAndRefundTheCorrectLevelAndRefreshTheMenu() {
-        f.manager.invenClick(f.click("§7Iron Node", 8)); verify(f.bank).withdraw(20.0);
+        f.manager.invenClick(f.click("§7Iron Node", 8)); verify(f.payments).change(f.node, f.guild, "level", 1, 2, 20.0);
         verify(f.node).setLevel(2); verify(f.node).update(); verify(f.lastInventory()).updateNodeView(f.player, f.node, f.inventory);
         when(f.node.getLevel()).thenReturn(2);
-        f.manager.invenClick(f.click("§7Iron Node", 26)); verify(f.bank).deposit(16.0); verify(f.node).setLevel(1);
+        f.manager.invenClick(f.click("§7Iron Node", 26)); verify(f.payments).change(f.node, f.guild, "level", 2, 1, -16.0); verify(f.node).setLevel(1);
         f.manager.upgradeNode(f.player, f.node, f.inventory); verify(f.player).sendMessage(contains("already at max level"));
         when(f.node.getLevel()).thenReturn(1); f.manager.downgradeNode(f.player, f.node, f.inventory);
         verify(f.player).sendMessage(contains("cannot go below level 1"));
         when(f.bank.getWealth()).thenReturn(1.0); f.manager.upgradeNode(f.player, f.node, f.inventory);
         verify(f.player).sendMessage(contains("does not have enough funds"));
         when(f.node.getLevel()).thenReturn(2); when(f.node.getGuild()).thenReturn(null);
-        f.manager.downgradeNode(f.player, f.node, f.inventory); verify(f.bank, times(1)).deposit(16.0);
+        f.manager.downgradeNode(f.player, f.node, f.inventory); verify(f.payments, times(1)).change(f.node, f.guild, "level", 2, 1, -16.0);
     }
 
     @Test
@@ -400,7 +400,7 @@ class NodeManagerEventsTest {
     @ValueSource(strings = {"§7Iron Node: Fuel", "§7Iron Node: Type", "§7Confirm Action"})
     void staleSubmenusCannotChangeNodesAfterThePlayersGuildMembershipEnds(String title) {
         f.manager.currentSlot.put(f.player, f.slot); f.manager.confirm.put(f.player, ConfirmType.DELETE_NODE);
-        f.factions.when(() -> FactionManager.getGuildByMember("Leader")).thenReturn(null);
+        f.factions.when(() -> FactionManager.getGuildByMember(f.player)).thenReturn(null);
         InventoryClickEvent event = f.click(title, title.equals("§7Confirm Action") ? 11 : 0);
         doReturn(f.item("Next")).when(event).getCurrentItem();
         ProductionMethod nextMethod = mock(ProductionMethod.class); when(nextMethod.getId()).thenReturn("next");
@@ -428,7 +428,7 @@ class NodeManagerEventsTest {
     @ValueSource(strings = {"§7Iron Node: Fuel", "§7Iron Node: Type", "§7Confirm Action"})
     void foreignGuildViewersCanStillReturnFromOrCancelTheMenu(String title) {
         f.manager.currentSlot.put(f.player, f.slot); f.manager.confirm.put(f.player, ConfirmType.DELETE_NODE);
-        f.factions.when(() -> FactionManager.getGuildByMember("Leader")).thenReturn(null);
+        f.factions.when(() -> FactionManager.getGuildByMember(f.player)).thenReturn(null);
         f.manager.invenClick(f.click(title, title.equals("§7Confirm Action") ? 15 : 26));
         verify(f.lastInventory()).nodeView(f.player, f.node);
         verify(f.node, never()).breakNode(); verify(f.player, never()).sendMessage(anyString());
@@ -455,6 +455,22 @@ class NodeManagerEventsTest {
         verify(f.player).sendMessage(contains("active"));
     }
 
+
+    @Test void unavailableRuntimeAndPaymentsNeverMutateNodeState() {
+        when(DowsingMain.plugin.nodesReady()).thenReturn(false);
+        InventoryClickEvent click=f.click("§7Iron Node",8);
+        f.manager.invenClick(click); verify(click).setCancelled(true);
+        verify(f.payments,never()).change(any(),any(),anyString(),anyInt(),anyInt(),anyDouble());
+        when(DowsingMain.plugin.nodesReady()).thenReturn(true);
+        when(f.payments.change(any(),any(),anyString(),anyInt(),anyInt(),anyDouble())).thenReturn(false);
+        f.manager.upgradeNode(f.player,f.node,f.inventory);
+        when(f.node.getNodeCapacityCost()).thenReturn(25.0);
+        f.manager.invenClick(f.click("§7Iron Node",24));
+        verify(f.node,never()).setLevel(anyInt());
+        assertEquals(0,NodeManager.getExtraCapacity(f.guild));
+        verify(f.player,atLeastOnce()).sendMessage(contains("pending or unavailable"));
+    }
+
     static final class Fixture implements AutoCloseable {
         final Map<Field, Object> previousCache = new HashMap<>();
         final List<Node> previousNodes = NodeManager.nodes;
@@ -463,6 +479,7 @@ class NodeManagerEventsTest {
         final int previousMaxCapacity = net.tfminecraft.simplefactions.Cache.maxExtraNodeCapacity;
         final ServerMock server;
         final NodeManager manager = new NodeManager();
+        final net.tfminecraft.dowsing.utils.NodePayments payments = mock(net.tfminecraft.dowsing.utils.NodePayments.class);
         final Guild guild = mock(Guild.class);
         final net.tfminecraft.simplefactions.objects.Bank bank = mock(net.tfminecraft.simplefactions.objects.Bank.class);
         final World world = mock(World.class);
@@ -489,6 +506,13 @@ class NodeManagerEventsTest {
             server = MockBukkit.mock();
             DowsingMain.plugin = mock(DowsingMain.class);
             when(DowsingMain.plugin.getLogger()).thenReturn(logger); when(DowsingMain.plugin.getServer()).thenReturn(server);
+            when(DowsingMain.plugin.payments()).thenReturn(payments);
+            when(payments.change(any(), any(), anyString(), anyInt(), anyInt(), anyDouble())).thenAnswer(invocation -> {
+                Node changed = invocation.getArgument(0);
+                if (invocation.getArgument(2).equals("level")) changed.setLevel(invocation.getArgument(4));
+                else NodeManager.extraCapacityByGuild.put(guild.getId(), invocation.getArgument(4));
+                return true;
+            });
             when(DowsingMain.plugin.getName()).thenReturn("Dowsing"); when(DowsingMain.plugin.isEnabled()).thenReturn(true);
             NodeManager.nodes = new ArrayList<>(); NodeManager.extraCapacityByGuild = new HashMap<>();
             Cache.extraCapacity = false; Cache.naturalYieldEnabled = false; Cache.cycleLength = 60;
@@ -510,7 +534,7 @@ class NodeManagerEventsTest {
             when(type.getLevels()).thenReturn(List.of(first, second));
             node = nodeAt(location);
             factions = mockStatic(FactionManager.class); factions.when(FactionManager::getCopy).thenReturn(new ArrayList<>());
-            factions.when(() -> FactionManager.getGuildByMember("Leader")).thenReturn(guild);
+            factions.when(() -> FactionManager.getGuildByMember(player)).thenReturn(guild);
             factions.when(() -> FactionManager.getGuildByString("guild")).thenReturn(guild);
             blocks = mockStatic(BlockLoader.class); blocks.when(() -> BlockLoader.getByBlock(Material.BARRIER)).thenReturn(block);
             blocks.when(() -> BlockLoader.getByPath("nodes:iron")).thenReturn(block);

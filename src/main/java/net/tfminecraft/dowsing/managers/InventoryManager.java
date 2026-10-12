@@ -248,7 +248,7 @@ public class InventoryManager {
 		ItemMeta m = i.getItemMeta();
 		m.setDisplayName("§eBelongs to: "+g.getName());
 		List<String> lore = new ArrayList<String>();
-		lore.add("§7Leader: §f"+g.getLeader());
+		lore.add("§7Leader: §f"+net.tfminecraft.simplefactions.identity.Members.display(g.getLeader()));
 		if(NodeManager.getNodeAmount(g) < n.getCapacity()) {
 			lore.add("§eNodes: §a"+NodeManager.getNodeAmount(g)+"/"+n.getCapacity());
 		} else if(NodeManager.getNodeAmount(g) == n.getCapacity()){

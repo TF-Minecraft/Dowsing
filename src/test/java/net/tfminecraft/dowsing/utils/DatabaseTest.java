@@ -170,4 +170,17 @@ class DatabaseTest {
         JSONObject result=(JSONObject)new JSONParser().parse(Files.readString(path)); assertEquals(4.0,result.get("integer")); assertEquals("§aGreen",result.get("existing")); assertFalse(result.containsKey("unsupported"));
         assertFalse(db.save(root.toFile(),defaults));
     }
+
+    @Test void snapshotSavesBeforePruningAndPreservesUnknownFiles() throws Exception {
+        World world=mock(World.class); when(world.getName()).thenReturn("world");
+        Node kept=node(world,false), removed=node(world,false);
+        assertTrue(db.saveNode(removed));
+        Path unknown=Files.writeString(root.resolve("Nodes/staff-note.txt"),"keep");
+        assertTrue(db.saveNodes(List.of(kept)));
+        assertTrue(Files.exists(root.resolve("Nodes/"+kept.getId()+".json")));
+        assertFalse(Files.exists(root.resolve("Nodes/"+removed.getId()+".json")));
+        assertTrue(Files.exists(unknown));
+        Database failing=spy(db); doReturn(false).when(failing).saveNode(kept);
+        assertFalse(failing.saveNodes(List.of(kept)));
+    }
 }

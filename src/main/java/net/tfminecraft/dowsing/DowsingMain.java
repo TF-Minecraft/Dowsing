@@ -6,6 +6,8 @@ import org.bukkit.ChatColor;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
 
 import net.tfminecraft.dowsing.loaders.BlockLoader;
 import net.tfminecraft.dowsing.loaders.ConfigLoader;
@@ -19,10 +21,13 @@ import net.tfminecraft.dowsing.objects.Node;
 import net.tfminecraft.dowsing.utils.Database;
 import net.tfminecraft.dowsing.utils.ItemCreator;
 import net.tfminecraft.dowsing.utils.TabCompletion;
+import net.tfminecraft.dowsing.utils.NodePayments;
+import net.tfminecraft.simplefactions.api.SimpleFactionsApi;
+import net.tfminecraft.simplefactions.events.SimpleFactionsReadyEvent;
 import net.tfminecraft.simplefactions.guild.income.Ledger;
 
 @SuppressWarnings("deprecation") // Preserve legacy section-color messages used by the plugin configuration.
-public class DowsingMain extends JavaPlugin{
+public class DowsingMain extends JavaPlugin implements Listener {
 	FileConfiguration config = getConfig();
 	
 	public static DowsingMain plugin;
@@ -40,6 +45,14 @@ public class DowsingMain extends JavaPlugin{
 	private static final NodeManager nodeManager = new NodeManager();
 	
 	Database db = new Database();
+	private NodePayments payments;
+	private boolean nodesLoaded;
+	private boolean managersStarted;
+
+	public NodePayments payments() { return payments; }
+	public boolean nodesReady() {
+		return managersStarted && SimpleFactionsApi.ready() && !payments.blocked();
+	}
 	
 	public static NodeManager getNodeManager() {
 		return nodeManager;
@@ -52,24 +65,45 @@ public class DowsingMain extends JavaPlugin{
 		createFolders();
 		createConfigs();
 		loadConfigs();
-		startManagers();
-		db.loadGuildCapacity();
-		db.loadNodes();
-		Ledger.setNodeUpkeepLookup(NodeManager::getTotalUpkeep);
-		NodeManager.requestNodeBenefitSync();
+		nodesLoaded = false;
+		managersStarted = false;
+		payments = new NodePayments(getDataFolder().toPath(), db, getLogger());
+		getServer().getPluginManager().registerEvents(this, plugin);
 		getServer().getPluginManager().registerEvents(resourceManager, plugin);
 		getServer().getPluginManager().registerEvents(nodeManager, plugin);
 		getCommand(commands.cmd1).setExecutor(commands);
 		getCommand(commands.cmd1).setTabCompleter(new TabCompletion());
+		tryStartNodes();
+		getServer().getScheduler().runTaskTimer(this, this::tryStartNodes, 100L, 100L);
+	}
+	@EventHandler
+	public void onFactionsReady(SimpleFactionsReadyEvent event) { tryStartNodes(); }
+
+	void tryStartNodes() {
+		if (!SimpleFactionsApi.ready()) return;
+		if (!nodesLoaded) {
+			NodeManager.nodes.clear();
+			NodeManager.extraCapacityByGuild.clear();
+			db.loadGuildCapacity();
+			db.loadNodes();
+			nodesLoaded = true;
+		}
+		if (managersStarted && !payments.blocked()) return;
+		if (!payments.recover()) return;
+		Ledger.setNodeUpkeepLookup(NodeManager::getTotalUpkeep);
+		NodeManager.requestNodeBenefitSync();
+		if (managersStarted) return;
+		managersStarted = true;
+		startManagers();
 	}
 	@Override
 	public void onDisable() {
 		Ledger.setNodeUpkeepLookup(null);
-		db.deleteDatabase();
-		for(Node n : NodeManager.nodes) {
-			db.saveNode(n);
+		if (nodesReady()) {
+			db.saveNodes(NodeManager.nodes);
+			db.saveGuildCapacity();
 		}
-		db.saveGuildCapacity();
+		managersStarted = false;
 	}
 	public void startManagers() {
 		nodeManager.start();
@@ -105,6 +139,7 @@ public class DowsingMain extends JavaPlugin{
 		}
 	}
 	public void reloadConfigCommand() {
+		if (!nodesReady()) return;
 		nodeManager.cacheNodes();
 		ItemCreator.clearInvalidPathWarnings();
 		BlockLoader.clear();

@@ -42,6 +42,8 @@ import net.tfminecraft.dowsing.objects.NodeSlot;
 import net.tfminecraft.dowsing.objects.NodeType;
 import net.tfminecraft.dowsing.objects.ProductionMethod;
 import net.tfminecraft.dowsing.utils.ItemDropper;
+import net.tfminecraft.dowsing.utils.NodePayments;
+import net.tfminecraft.simplefactions.api.SimpleFactionsApi;
 import net.tfminecraft.dowsing.utils.NodeEngine;
 import net.tfminecraft.dowsing.utils.NodeReloader;
 import net.tfminecraft.dowsing.utils.NodeToggleLog;
@@ -67,6 +69,7 @@ public class NodeManager implements Listener{
 	}
 
 	public static void syncFactionNodeBenefits() {
+		if (!SimpleFactionsApi.ready()) return;
 		Map<Faction, Double> prestigeByFaction = new HashMap<>();
 		Map<Faction, Double> wealthByFaction = new HashMap<>();
 		for(Node n : nodes) {
@@ -158,6 +161,7 @@ public class NodeManager implements Listener{
 		{
 			public void run()
 			   {
+					if (!DowsingMain.plugin.nodesReady()) return;
 					validate();
 					for(Node n : nodes) {
 						try {
@@ -204,6 +208,7 @@ public class NodeManager implements Listener{
 		{
 			public void run()
 			{
+				if (!DowsingMain.plugin.nodesReady()) return;
 				for(Node n : nodes){
 					if(n.isClaimable()){
 						Location loc = n.getLoc().clone().add(0.5, 1, 0.5);
@@ -220,6 +225,7 @@ public class NodeManager implements Listener{
 		{
 			public void run()
 			{
+				if (!DowsingMain.plugin.nodesReady()) return;
 				for(Node n : nodes){
 					n.growEfficiency();
 				}	
@@ -227,6 +233,7 @@ public class NodeManager implements Listener{
 		}.runTaskTimer(DowsingMain.plugin, 0L, 72000L);
 	}
 	public void validate() {
+		if (!SimpleFactionsApi.ready()) return;
 		for(int i = 0; i<nodes.size();i++) {
 			Node n = nodes.get(i);
 			if(!n.getLoc().getBlock().getType().equals(Material.BARRIER)) {
@@ -236,6 +243,7 @@ public class NodeManager implements Listener{
 		}
 	}
 	public void confirmClick(Player p, Node n, ConfirmType t) {
+		if (!DowsingMain.plugin.nodesReady()) return;
 		if(t != ConfirmType.DEACTIVATE && blockPendingRefund(p, n)) return;
 		if(t != ConfirmType.DEACTIVATE && blockActiveChange(p, n,
 				t == ConfirmType.DELETE_NODE ? "delete node" : "change type")) return;
@@ -272,7 +280,7 @@ public class NodeManager implements Listener{
 	}
 	private boolean canManageNode(Player p, Node n) {
 		if(p.hasPermission("dowsing.admin")) return true;
-		Guild memberGuild = FactionManager.getGuildByMember(p.getName());
+		Guild memberGuild = FactionManager.getGuildByMember(p);
 		Guild owner = n.getGuild();
 		if(memberGuild != null && owner != null && owner.getId().equalsIgnoreCase(memberGuild.getId())) return true;
 		p.sendMessage("§cCannot change another guild's node");
@@ -312,6 +320,7 @@ public class NodeManager implements Listener{
 		}
 	}
 	private void tryCreateNode(Player p, Location loc, NodeBlock b, Cancellable e) {
+		if (!DowsingMain.plugin.nodesReady()) { e.setCancelled(true); return; }
 		if(p == null || loc == null || b == null) {
 			e.setCancelled(true);
 			return;
@@ -327,7 +336,7 @@ public class NodeManager implements Listener{
 				return;
 			}
 		}
-		Guild g = FactionManager.getGuildByMember(p.getName());
+		Guild g = FactionManager.getGuildByMember(p);
 		if(g == null) {
 			p.sendMessage("§cYou need to have a guild to use nodes!");
 			e.setCancelled(true);
@@ -371,6 +380,7 @@ public class NodeManager implements Listener{
 	}
 	@EventHandler(ignoreCancelled = true)
 	public void openNode(PlayerInteractEvent e) {
+		if (!DowsingMain.plugin.nodesReady()) return;
 		if(e.getClickedBlock() == null) return;
 		if(e.getAction().equals(Action.LEFT_CLICK_BLOCK)) {
 			if(getByLocation(e.getClickedBlock().getLocation()) == null) return;
@@ -384,7 +394,7 @@ public class NodeManager implements Listener{
 		InventoryManager inv = new InventoryManager();
 		e.setCancelled(true);
 		if(n.isClaimable()){
-			Guild g = FactionManager.getGuildByLeader(p.getName());
+			Guild g = FactionManager.getGuildByLeader(p);
 			if(g == null) {
 				p.sendMessage("§cMust be a guild leader to claim an unclaimed node!");
 				p.playSound(p.getLocation(), Sound.ENTITY_VILLAGER_NO, 1f, 1f);
@@ -412,6 +422,10 @@ public class NodeManager implements Listener{
 	}
 	@EventHandler
 	public void invenClick(InventoryClickEvent e) {
+		if (!DowsingMain.plugin.nodesReady()) {
+			if (currentNode.containsKey(e.getWhoClicked())) e.setCancelled(true);
+			return;
+		}
 		Player p = (Player) e.getWhoClicked();
 		if(!currentNode.containsKey(p)) return;
 		Node n = currentNode.get(p);
@@ -425,7 +439,7 @@ public class NodeManager implements Listener{
 				p.closeInventory();
 				return;
 			}
-			Guild g = FactionManager.getGuildByMember(p.getName());
+			Guild g = FactionManager.getGuildByMember(p);
 			if(!canManageNode(p, n)) return;
 			if(e.getSlot() != 17 && blockPendingRefund(p, n)) return;
 			if(e.getSlot() == 8) {
@@ -623,8 +637,10 @@ public class NodeManager implements Listener{
 			p.playSound(p.getLocation(), Sound.ENTITY_VILLAGER_NO, 1f, 1f);
 			return;
 		}
-		g.getBank().withdraw(cost);
-		extraCapacityByGuild.put(g.getId(), getExtraCapacity(g)+1);
+		if (!payments().change(n, g, "capacity", getExtraCapacity(g), getExtraCapacity(g)+1, cost)) {
+			p.sendMessage("§cNode payment is pending or unavailable. Try again shortly.");
+			return;
+		}
 		p.sendMessage("§aPurchased +1 Capacity");
 		p.playSound(p.getLocation(), Sound.BLOCK_NOTE_BLOCK_BIT, 1f, 1f);
 		InventoryManager inv = new InventoryManager();
@@ -646,8 +662,10 @@ public class NodeManager implements Listener{
 			return;
 		}
 		p.playSound(p.getLocation(), Sound.BLOCK_NOTE_BLOCK_BIT, 1f, 1f);
-		g.getBank().withdraw(cost);
-		n.setLevel(n.getLevel()+1);
+		if (!payments().change(n, g, "level", n.getLevel(), n.getLevel()+1, cost)) {
+			p.sendMessage("§cNode payment is pending or unavailable. Try again shortly.");
+			return;
+		}
 		InventoryManager inv = new InventoryManager();
 		n.update();
 		requestNodeBenefitSync();
@@ -661,15 +679,19 @@ public class NodeManager implements Listener{
 		}
 		Level lvl = n.getCurrentType().getLevels().get(n.getLevel()-1);
 		Double refund = lvl.getCost()*Cache.refundPercentage;
-		if(n.getGuild() != null && n.getGuild().getBank() != null) {
-			n.getGuild().getBank().deposit(refund);
+		if(n.getGuild() == null || n.getGuild().getBank() == null ||
+				!payments().change(n, n.getGuild(), "level", n.getLevel(), n.getLevel()-1, -refund)) {
+			p.sendMessage("§cNode payment is pending or unavailable. Try again shortly.");
+			return;
 		}
 		p.playSound(p.getLocation(), Sound.BLOCK_NOTE_BLOCK_BIT, 1f, 1f);
-		n.setLevel(n.getLevel()-1);
 		InventoryManager inv = new InventoryManager();
 		n.update();
 		requestNodeBenefitSync();
 		inv.updateNodeView(p, n, i);
+	}
+	private NodePayments payments() {
+		return DowsingMain.plugin.payments();
 	}
 	public void cacheNodes() {
 		cached.clear();
