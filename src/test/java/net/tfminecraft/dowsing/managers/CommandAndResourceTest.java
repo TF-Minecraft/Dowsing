@@ -66,14 +66,54 @@ class CommandAndResourceTest {
         assertEquals(List.of(),tabs.onTabComplete(player,command,"dowsing",new String[]{"deleteresource",""}));
         Files.createDirectories(root.resolve("Resources/nested")); Files.writeString(root.resolve("Resources/iron.txt"),"");
         assertEquals(List.of("iron"),tabs.onTabComplete(player,command,"dowsing",new String[]{"deleteresource",""}));
-        assertEquals(List.of("<id>"),tabs.onTabComplete(player,command,"",new String[]{"createresource",""}));
-        assertEquals(List.of("<material>"),tabs.onTabComplete(player,command,"",new String[]{"createresource","x",""}));
+        assertEquals(List.of(),tabs.onTabComplete(player,command,"",new String[]{"createresource",""}));
         assertEquals(List.of("1","2","3","4","5","6","7","8"),tabs.onTabComplete(player,command,"",new String[]{"createresource","x","y",""}));
-        assertNull(tabs.onTabComplete(player,command,"",new String[]{"reload"}));
+        assertEquals(List.of("reload"),tabs.onTabComplete(player,command,"",new String[]{"reload"}));
         CommandSender console=mock(CommandSender.class); when(console.hasPermission(Permissions.Permission_Admin)).thenReturn(true);
-        for(String[] args:List.of(new String[]{""},new String[]{"createresource",""},new String[]{"createresource","x",""},new String[]{"createresource","x","y",""},new String[]{"deleteresource",""})) assertNull(tabs.onTabComplete(console,command,"",args));
-        when(command.getName()).thenReturn("other"); assertNull(tabs.onTabComplete(player,command,"",new String[]{""}));
-        when(player.hasPermission(Permissions.Permission_Admin)).thenReturn(false); assertNull(tabs.onTabComplete(player,command,"",new String[]{""}));
+        assertEquals(List.of("reload"),tabs.onTabComplete(console,command,"",new String[]{""}));
+        for(String[] args:List.of(new String[]{"createresource",""},new String[]{"createresource","x",""},new String[]{"createresource","x","y",""},new String[]{"deleteresource",""})) assertEquals(List.of(),tabs.onTabComplete(console,command,"",args));
+        when(command.getName()).thenReturn("other"); assertEquals(List.of(),tabs.onTabComplete(player,command,"",new String[]{""}));
+        when(player.hasPermission(Permissions.Permission_Admin)).thenReturn(false); assertEquals(List.of(),tabs.onTabComplete(player,command,"",new String[]{""}));
+    }
+    @Test void completionFiltersEveryCurrentTokenAndUsesLoadedResourceLabels() throws Exception {
+        TabCompletion tabs = new TabCompletion();
+        Files.createDirectories(root.resolve("Resources"));
+        Files.writeString(root.resolve("Resources/iron.txt"), "");
+        Files.writeString(root.resolve("Resources/ignored.json"), "");
+        var mineral = mock(net.tfminecraft.dowsing.objects.NodeType.class);
+        var duplicate = mock(net.tfminecraft.dowsing.objects.NodeType.class);
+        var magic = mock(net.tfminecraft.dowsing.objects.NodeType.class);
+        var missing = mock(net.tfminecraft.dowsing.objects.NodeType.class);
+        var blank = mock(net.tfminecraft.dowsing.objects.NodeType.class);
+        when(mineral.getResource()).thenReturn("mineral");
+        when(duplicate.getResource()).thenReturn("mineral");
+        when(magic.getResource()).thenReturn("Magic");
+        when(blank.getResource()).thenReturn(" ");
+        try (var types = mockStatic(net.tfminecraft.dowsing.loaders.TypeLoader.class)) {
+            types.when(net.tfminecraft.dowsing.loaders.TypeLoader::getNodeTypes)
+                    .thenReturn(List.of(mineral, duplicate, magic, missing, blank));
+            assertEquals(List.of("reload"), tabs.onTabComplete(player, command, "", new String[]{"RE"}));
+            assertEquals(List.of("reload"), tabs.onTabComplete(player, command, "", new String[]{"reload"}));
+            assertEquals(List.of("iron"), tabs.onTabComplete(player, command, "", new String[]{"DELETERESOURCE", "IR"}));
+            assertEquals(List.of("mineral", "Magic"), tabs.onTabComplete(player, command, "", new String[]{"createresource", "id", ""}));
+            assertEquals(List.of("mineral"), tabs.onTabComplete(player, command, "", new String[]{"CREATERESOURCE", "id", "mI"}));
+            assertEquals(List.of("2"), tabs.onTabComplete(player, command, "", new String[]{"createresource", "id", "mineral", "2"}));
+            for (String[] args : List.of(new String[]{"absent"}, new String[]{"reload", ""},
+                    new String[]{"deleteresource", "missing"}, new String[]{"createresource", "id", "missing"},
+                    new String[]{"createresource", "id", "mineral", "9"}, new String[]{"createresource", "id", "mineral", "2", ""})) {
+                assertTrue(tabs.onTabComplete(player, command, "", args).isEmpty());
+            }
+            types.when(net.tfminecraft.dowsing.loaders.TypeLoader::getNodeTypes).thenReturn(List.of(magic));
+            assertTrue(tabs.onTabComplete(player, command, "", new String[]{"createresource", "id", "mi"}).isEmpty());
+            assertEquals(List.of("Magic"), tabs.onTabComplete(player, command, "", new String[]{"createresource", "id", ""}));
+            CommandSender console = mock(CommandSender.class);
+            when(console.hasPermission(Permissions.Permission_Admin)).thenReturn(true);
+            assertEquals(List.of("reload"), tabs.onTabComplete(console, command, "", new String[]{"rE"}));
+            assertTrue(tabs.onTabComplete(console, command, "", new String[]{"create"}).isEmpty());
+            assertTrue(tabs.onTabComplete(console, command, "", new String[]{"reload", ""}).isEmpty());
+            when(console.hasPermission(Permissions.Permission_Admin)).thenReturn(false);
+            assertTrue(tabs.onTabComplete(console, command, "", new String[]{""}).isEmpty());
+        }
     }
     @Test void dowsingStickHandlesActionsCooldownTypeAndYieldColors() throws Exception {
         String previousStick=Cache.dowsingStick; Boolean previousEnabled=Cache.naturalYieldEnabled;
