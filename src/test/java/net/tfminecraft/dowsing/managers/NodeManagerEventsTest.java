@@ -193,13 +193,24 @@ class NodeManagerEventsTest {
         verify(event, never()).setCancelled(true);
     }
 
+    @Test
+    void staleMenusCannotActOnRemovedNodes() {
+        InventoryClickEvent event = f.click("§7Confirm Action", 11);
+        f.manager.confirm.put(f.player, ConfirmType.DEACTIVATE);
+        NodeManager.nodes.remove(f.node);
+        f.manager.invenClick(event);
+        verify(f.player).closeInventory();
+        assertFalse(f.manager.currentNode.containsKey(f.player));
+        verify(f.node, never()).deActivate(); verify(f.node, never()).breakNode();
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"§7Iron Node", "§7Iron Node: Fuel", "§7Iron Node: Type", "§7Confirm Action"})
     void everyManagedMenuCancelsBottomInventoryClicksAndRemovesOrphanNodes(String title) {
         f.manager.currentSlot.put(f.player, f.slot);
         InventoryClickEvent event = f.click(title, 0); when(event.getClickedInventory()).thenReturn(mock(Inventory.class));
         f.manager.invenClick(event); verify(event).setCancelled(true); verify(f.node, never()).breakNode();
-        when(f.node.hasGuild()).thenReturn(false); NodeManager.nodes.add(f.node);
+        when(f.node.hasGuild()).thenReturn(false);
         event = f.click(title, 0); f.manager.invenClick(event);
         verify(f.node).breakNode(); verify(f.player).closeInventory(); assertTrue(NodeManager.nodes.isEmpty());
     }
@@ -361,7 +372,7 @@ class NodeManagerEventsTest {
         f.manager.confirm.put(f.player, ConfirmType.DELETE_NODE);
         f.manager.invenClick(f.click("§7Confirm Action", 15)); verify(f.lastInventory()).nodeView(f.player, f.node);
         f.manager.invenClick(f.click("§7Confirm Action", 0)); verify(f.node, never()).breakNode();
-        NodeManager.nodes.add(f.node); f.manager.invenClick(f.click("§7Confirm Action", 11));
+        f.manager.invenClick(f.click("§7Confirm Action", 11));
         verify(f.node).breakNode(); assertTrue(NodeManager.nodes.isEmpty()); assertFalse(f.manager.confirm.containsKey(f.player));
     }
 
@@ -567,6 +578,7 @@ class NodeManagerEventsTest {
         }
         InventoryClickEvent click(String title, int index) {
             manager.currentNode.put(player, node);
+            if (!NodeManager.nodes.contains(node)) NodeManager.nodes.add(node);
             InventoryClickEvent event = mock(InventoryClickEvent.class); InventoryView view = mock(InventoryView.class);
             when(event.getWhoClicked()).thenReturn(player); when(event.getView()).thenReturn(view); when(view.getTitle()).thenReturn(title);
             when(view.getTopInventory()).thenReturn(inventory); when(event.getClickedInventory()).thenReturn(inventory); when(event.getSlot()).thenReturn(index); return event;

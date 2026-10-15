@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.logging.Level;
@@ -38,6 +39,7 @@ import net.tfminecraft.simplefactions.objects.Faction;
 
 @SuppressWarnings("deprecation") // Stored configuration text uses Bukkit legacy color codes.
 public class Database {
+	static final String PENDING_RESULT_KEY = "pending result";
     private JSONObject json = new JSONObject(); // org.json.simple
     JSONParser parser = new JSONParser();
     private File[] listFiles(File directory) {
@@ -116,6 +118,10 @@ public class Database {
     				if(json.containsKey(LastCycleResult.KEY)) {
     					n.setLastResult(LastCycleResult.fromJson(json.get(LastCycleResult.KEY)));
     				}
+				if(json.containsKey(PENDING_RESULT_KEY)) {
+					Map<String, Integer> pendingResult = LastCycleResult.fromJson(json.get(PENDING_RESULT_KEY));
+					if(!pendingResult.isEmpty()) n.setPendingResult(pendingResult);
+				}
     				NodeManager.nodes.add(n);
     			} catch (Exception ex) {
     				ex.printStackTrace();
@@ -248,6 +254,7 @@ public class Database {
         	defaults.put("active pms", pmArray);
 			defaults.put("efficiency", n.getEfficiency());
 			defaults.put(LastCycleResult.KEY, LastCycleResult.toJson(n.getLastResult()));
+			defaults.put(PENDING_RESULT_KEY, LastCycleResult.toJson(n.getPendingResult()));
 			return save(file, defaults);
         } catch (Throwable ex) {
 			ex.printStackTrace();

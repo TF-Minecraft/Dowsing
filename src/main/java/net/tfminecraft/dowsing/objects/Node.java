@@ -54,6 +54,8 @@ public class Node {
 	Integer multiplier;
 	Double costIncrease;
 	Map<String, Integer> lastResult = new HashMap<>();
+	Map<String, Integer> pendingResult;
+	boolean broken;
 	List<String> addedDrops = new ArrayList<String>();
 	List<String> errors = new ArrayList<String>();
 	Map<String, Double> completeDrop = new HashMap<>();
@@ -150,6 +152,13 @@ public class Node {
 	}
 	public void setLastResult(Map<String, Integer> lastResult) {
 		this.lastResult = lastResult;
+	}
+	/** Rolled output that could not be delivered yet; null when no cycle output is waiting. */
+	public Map<String, Integer> getPendingResult() {
+		return pendingResult;
+	}
+	public void setPendingResult(Map<String, Integer> pendingResult) {
+		this.pendingResult = pendingResult;
 	}
 	public NodeBlock getBlock() {
 		return block;
@@ -409,6 +418,7 @@ public class Node {
 		ng.takeInputs(this);
 	}
 	public void refund() {
+		if(this.broken) return;
 		NodeEngine ng = new NodeEngine();
 		Boolean failed = false;
 		this.errors.clear();
@@ -431,6 +441,7 @@ public class Node {
 		ng.refund(this);;
 	}
 	public void activate() {
+		if(this.broken) return;
 		if(hasPendingRefund()) {
 			deActivate();
 			return;
@@ -480,6 +491,13 @@ public class Node {
 		if(failed) {
 			return;
 		}
+		if(this.pendingResult != null && !this.pendingResult.isEmpty()) {
+			// Settle held output before new inputs are taken, so a later refund cannot cancel it.
+			if(!new ItemDropper().dropItems(this)) {
+				this.errors.add("§7Held output does not fit in the hopper");
+				return;
+			}
+		}
 		this.isActive = true;
 		this.timeLeft = this.modifiedTime;
 		this.cycleTime = 0;
@@ -493,14 +511,19 @@ public class Node {
 	}
 	public void deActivate() {
 		this.isActive = false;
+		// A broken node is terminal: stale menus must not refund or restart it.
+		if(this.broken) return;
 		if(isClaimable()) return;
 		if(this.cycleTime >= 0 && this.cycleTime < Cache.cycleLength) {
+			boolean refunded = this.getInputCounter() > 0;
 			while(this.getInputCounter() > 0) {
 				int pendingInputs = this.getInputCounter();
 				refund();
 				// A missing barrel or hopper prevents refunds. Keep the pending inputs for retry.
 				if(this.getInputCounter() >= pendingInputs) break;
 			}
+			// Returning this cycle's inputs cancels its held output; incomplete refunds keep it.
+			if(refunded && this.getInputCounter() == 0) setPendingResult(null);
 		}
 		NodeManager.requestNodeBenefitSync();
 	}
@@ -667,6 +690,9 @@ public class Node {
 		return 0;
 	}
 	public void breakNode() {
+		// Stale menus can repeat removal; the node item and held output must drop only once.
+		if(this.broken) return;
+		this.broken = true;
 		String path = this.getBlock().getBlock();
 		String type = path.split("\\.")[0];
 		if(type.equalsIgnoreCase("v")) {
@@ -680,6 +706,16 @@ public class Node {
 		Location loc = new Location(this.getLoc().getWorld(), this.getLoc().getX(), this.getLoc().getY(), this.getLoc().getZ());
 		loc.add(0.5,0,0.5);
 		ItemDropper dropper = new ItemDropper();
+		Map<String, Integer> heldOutput = this.pendingResult;
+		setPendingResult(null);
+		if(heldOutput != null) {
+			// Removing the node returns its held output instead of discarding it.
+			for(Map.Entry<String, Integer> entry : heldOutput.entrySet()) {
+				for(int count = 0; count < entry.getValue(); count++) {
+					dropper.dropItem(loc, entry.getKey(), false);
+				}
+			}
+		}
 		dropper.dropItem(loc, path, false);
 		loc.getWorld().playSound(loc, Sound.ENTITY_GLOW_ITEM_FRAME_REMOVE_ITEM, 0.5f, 1f);
 		NodeManager.requestNodeBenefitSync();

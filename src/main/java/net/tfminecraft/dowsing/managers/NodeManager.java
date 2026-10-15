@@ -429,6 +429,12 @@ public class NodeManager implements Listener{
 		Player p = (Player) e.getWhoClicked();
 		if(!currentNode.containsKey(p)) return;
 		Node n = currentNode.get(p);
+		if(!nodes.contains(n)) {
+			// The node was already removed; stale menus must not act on it.
+			currentNode.remove(p);
+			p.closeInventory();
+			return;
+		}
 		InventoryManager inv = new InventoryManager();
 		if(e.getView().getTitle().equalsIgnoreCase("§7"+n.getBlock().getResource()+ " Node")) {
 			e.setCancelled(true);

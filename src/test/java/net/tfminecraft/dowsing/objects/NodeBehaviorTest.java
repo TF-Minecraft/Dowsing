@@ -57,6 +57,7 @@ class NodeBehaviorTest {
         assertEquals(0.0, node.getTimeModifier()); assertEquals(1, node.getMultiplier());
         assertEquals(1.0, node.getCostIncrease()); assertTrue(node.getAddedDrops().isEmpty());
         assertTrue(node.getErrors().isEmpty()); assertTrue(node.getLastResult().isEmpty());
+        assertNull(node.getPendingResult());
         UUID replacement = UUID.randomUUID();
         Location moved = new Location(f.world, 8, 65, 9);
         NodeBlock replacementBlock = mock(NodeBlock.class); NodeType replacementType = mock(NodeType.class);
@@ -67,6 +68,7 @@ class NodeBehaviorTest {
         node.setWealthModifier(2.5); node.setPrestigeGain(3.5); node.setTimeModifier(-20.0);
         node.setMultiplier(3); node.setCostIncrease(1.5); node.setAddedDrops(new ArrayList<>(List.of("v.STONE(1)")));
         node.setErrors(new ArrayList<>(List.of("broken"))); node.setLastResult(new HashMap<>(Map.of("v.STONE", 2)));
+        node.setPendingResult(new HashMap<>(Map.of("v.DIRT", 5)));
         assertEquals(replacement, node.getId()); assertSame(replacementBlock, node.getBlock());
         assertSame(moved, node.getLoc()); assertSame(replacementType, node.getCurrentType());
         assertSame(f.guild, node.getGuild()); assertFalse(node.getIsActive()); assertEquals(3, node.getLevel());
@@ -78,6 +80,7 @@ class NodeBehaviorTest {
         assertEquals(3, node.getMultiplier()); assertEquals(1.5, node.getCostIncrease());
         assertEquals(List.of("v.STONE(1)"), node.getAddedDrops());
         assertEquals(List.of("broken"), node.getErrors()); assertEquals(Map.of("v.STONE", 2), node.getLastResult());
+        assertEquals(Map.of("v.DIRT", 5), node.getPendingResult());
     }
 
     @Test
