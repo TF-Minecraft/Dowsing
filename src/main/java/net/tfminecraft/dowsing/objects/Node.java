@@ -54,6 +54,7 @@ public class Node {
 	Integer multiplier;
 	Double costIncrease;
 	Map<String, Integer> lastResult = new HashMap<>();
+	Map<String, Integer> pendingResult;
 	List<String> addedDrops = new ArrayList<String>();
 	List<String> errors = new ArrayList<String>();
 	Map<String, Double> completeDrop = new HashMap<>();
@@ -150,6 +151,13 @@ public class Node {
 	}
 	public void setLastResult(Map<String, Integer> lastResult) {
 		this.lastResult = lastResult;
+	}
+	/** Rolled output that could not be delivered yet; null when no cycle output is waiting. */
+	public Map<String, Integer> getPendingResult() {
+		return pendingResult;
+	}
+	public void setPendingResult(Map<String, Integer> pendingResult) {
+		this.pendingResult = pendingResult;
 	}
 	public NodeBlock getBlock() {
 		return block;

@@ -118,6 +118,7 @@ class DatabaseTest {
         when(n.getIsActive()).thenReturn(true); when(n.getLevel()).thenReturn(2); when(n.getCycleTime()).thenReturn(3);
         when(n.getTimeLeft()).thenReturn(4); when(n.getInputCounter()).thenReturn(5); when(n.getEfficiency()).thenReturn(80.0);
         when(n.getLastResult()).thenReturn(Map.of("v.STONE",4)); when(n.hasGuild()).thenReturn(owned);
+        when(n.getPendingResult()).thenReturn(Map.of("v.DIRT",2));
         Guild guild = mock(Guild.class); when(guild.getId()).thenReturn("guild"); when(n.getGuild()).thenReturn(guild);
         return n;
     }
@@ -144,6 +145,7 @@ class DatabaseTest {
             types.when(() -> TypeLoader.getByString("type")).thenReturn(loadedType); pms.when(() -> PMLoader.getByString("pm")).thenReturn(pm);
             db.loadNodes(); assertEquals(1,NodeManager.nodes.size()); verify(slot).setActivePm(pm);
             verify(NodeManager.nodes.getFirst()).setLastResult(Map.of("v.STONE",4));
+            verify(NodeManager.nodes.getFirst()).setPendingResult(Map.of("v.DIRT",2));
             NodeManager.nodes.clear(); json.remove("efficiency"); json.remove(LastCycleResult.KEY); json.put("active pms",new JSONArray());
             Files.writeString(path,json.toJSONString()); db.loadNodes(); assertEquals(1,NodeManager.nodes.size());
             types.when(() -> TypeLoader.getByString("type")).thenReturn(null); NodeManager.nodes.clear(); db.loadNodes(); assertTrue(NodeManager.nodes.isEmpty());

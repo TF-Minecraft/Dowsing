@@ -174,21 +174,77 @@ class ItemDropperTest {
 	@Test
 	void fullHopperHoldsTheCycleAndRestoresItsContents() {
 		World world = mock(World.class);
-		Node node = nodeAt(new Location(world, 4, 60, 7), Map.of("v.STONE", 1.0), 3);
+		Node node = nodeAt(new Location(world, 4, 60, 7), Map.of("v.STONE", 1.0, "v.DIRT", 1.0), 3);
+		Map<String, Integer> pending = new LinkedHashMap<>(Map.of("v.STONE", 1, "v.DIRT", 2));
+		when(node.getPendingResult()).thenReturn(pending);
 		Inventory inventory = hopperAbove(world);
 		ItemStack[] before = new ItemStack[5];
 		when(inventory.getContents()).thenReturn(before);
 		ItemStack template = mock(ItemStack.class);
 		ItemStack delivered = mock(ItemStack.class);
 		when(template.clone()).thenReturn(delivered);
-		when(inventory.addItem(any(ItemStack.class))).thenReturn(new HashMap<>(Map.of(0, delivered)));
+		// The first reward fits and the second does not, on both attempts.
+		when(inventory.addItem(any(ItemStack.class))).thenReturn(new HashMap<>(), new HashMap<>(Map.of(0, delivered)),
+				new HashMap<>(), new HashMap<>(Map.of(0, delivered)));
 		List<String> warnings = new ArrayList<>();
 		ItemDropper dropper = new ItemDropper(path -> template, warnings::add);
 		assertFalse(dropper.dropItems(node)); assertFalse(dropper.dropItems(node));
 		verify(inventory, times(2)).setContents(before);
+		verify(node, times(2)).setPendingResult(pending);
+		verify(node, never()).setPendingResult(null);
 		verify(node, never()).setLastResult(any());
 		verify(world, never()).dropItem(any(Location.class), any(ItemStack.class));
+		verify(world, never()).playSound(any(Location.class), any(Sound.class), anyFloat(), anyFloat());
 		assertEquals(1, warnings.size()); assertTrue(warnings.getFirst().contains("output hopper is full"));
+	}
+
+	@Test
+	void blockedOutputIsDeliveredAsRolledOnceTheHopperHasRoom() {
+		World world = mock(World.class);
+		Node node = nodeAt(new Location(world, 4, 60, 7), Map.of("v.STONE", 1.0), 3);
+		when(node.getPendingResult()).thenReturn(null, Map.of("v.STONE", 3));
+		Inventory inventory = hopperAbove(world);
+		when(inventory.getContents()).thenReturn(new ItemStack[5]);
+		ItemStack template = mock(ItemStack.class);
+		ItemStack delivered = mock(ItemStack.class);
+		when(template.clone()).thenReturn(delivered);
+		when(inventory.addItem(any(ItemStack.class))).thenReturn(new HashMap<>(Map.of(0, delivered)), new HashMap<>());
+		ItemDropper dropper = new ItemDropper(path -> template, message -> {});
+		assertFalse(dropper.dropItems(node));
+		verify(node).setPendingResult(Map.of("v.STONE", 3));
+		// A reroll at the new yield would deliver 99 instead of the held 3.
+		when(node.getYield()).thenReturn(99);
+		assertTrue(dropper.dropItems(node));
+		verify(delivered, times(2)).setAmount(3); verify(delivered, never()).setAmount(99);
+		verify(node).setPendingResult(null); verify(node).setLastResult(Map.of("v.STONE", 3));
+	}
+
+	@Test
+	void nothingOnlyOutputCompletesWithoutTouchingTheHopper() {
+		World world = mock(World.class);
+		Node node = nodeAt(new Location(world, 4, 60, 7), Map.of("nothing", 1.0), 3);
+		Inventory inventory = hopperAbove(world);
+		when(inventory.getContents()).thenReturn(new ItemStack[5]);
+		assertTrue(new ItemDropper(path -> { fail("Nothing must not be resolved"); return null; }, message -> fail(message)).dropItems(node));
+		verify(inventory, never()).addItem(any(ItemStack.class));
+		verify(world, never()).playSound(any(Location.class), any(Sound.class), anyFloat(), anyFloat());
+		verify(node).setPendingResult(null); verify(node).setLastResult(Map.of());
+	}
+
+	@Test
+	void pendingAmountsAboveOneStackAreDeliveredAsOneTransaction() {
+		World world = mock(World.class);
+		Node node = nodeAt(new Location(world, 4, 60, 7), Map.of("v.STONE", 1.0), 3);
+		when(node.getPendingResult()).thenReturn(Map.of("v.STONE", 130));
+		Inventory inventory = hopperAbove(world);
+		when(inventory.getContents()).thenReturn(new ItemStack[5]);
+		when(inventory.addItem(any(ItemStack.class))).thenReturn(new HashMap<>());
+		ItemStack template = mock(ItemStack.class);
+		ItemStack delivered = mock(ItemStack.class);
+		when(template.clone()).thenReturn(delivered);
+		assertTrue(new ItemDropper(path -> template, message -> fail(message)).dropItems(node));
+		verify(delivered).setAmount(130); verify(inventory).addItem(delivered);
+		verify(node).setPendingResult(null); verify(node).setLastResult(Map.of("v.STONE", 130));
 	}
 
 	private Inventory hopperAbove(World world) {

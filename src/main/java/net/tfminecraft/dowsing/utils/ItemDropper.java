@@ -2,6 +2,7 @@ package net.tfminecraft.dowsing.utils;
 
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.HashSet;
@@ -41,8 +42,10 @@ public class ItemDropper {
 	 * can retry instead of losing items.
 	 */
 	public boolean dropItems(Node n) {
+		Map<String, Integer> pending = n.getPendingResult();
+		boolean retained = pending != null && !pending.isEmpty();
 		Map<String, ItemStack> items = new HashMap<>();
-		for(String key : n.getCompleteDrop().keySet()) {
+		for(String key : retained ? pending.keySet() : n.getCompleteDrop().keySet()) {
 			if(key.equalsIgnoreCase("nothing")) continue;
 			ItemStack item = itemFactory.apply(key);
 			if(item == null) {
@@ -56,37 +59,45 @@ public class ItemDropper {
 			items.put(key, item);
 		}
 		Map<String, Integer> result = new HashMap<>();
-		Double maxWeight = 0.0;
-		for(String key : n.getCompleteDrop().keySet()) {
-			maxWeight = maxWeight+n.getCompleteDrop().get(key);
-		}
-		int safety = 0;
-		Integer dropped = 0;
-		while(dropped < n.getYield() && safety < n.getYield() * 10) {
-			safety++;
-			Double random = Math.random();
-			Double previous = 0.0;
+		if(retained) {
+			// A held cycle keeps its rolled output; retries must not reroll it.
+			result = new LinkedHashMap<>(pending);
+		} else {
+			Double maxWeight = 0.0;
 			for(String key : n.getCompleteDrop().keySet()) {
-				if(maxWeight <= 0) {
-					maxWeight = 1.0;
-				}
-				Double chance = n.getCompleteDrop().get(key) / maxWeight;
-				Double max = previous+chance;
-				if(random <= max && random > previous) {
-					dropped++;
-					if(!key.equalsIgnoreCase("nothing")) {
-						result.merge(key, 1, Integer::sum);
+				maxWeight = maxWeight+n.getCompleteDrop().get(key);
+			}
+			int safety = 0;
+			Integer dropped = 0;
+			while(dropped < n.getYield() && safety < n.getYield() * 10) {
+				safety++;
+				Double random = Math.random();
+				Double previous = 0.0;
+				for(String key : n.getCompleteDrop().keySet()) {
+					if(maxWeight <= 0) {
+						maxWeight = 1.0;
 					}
-					break;
+					Double chance = n.getCompleteDrop().get(key) / maxWeight;
+					Double max = previous+chance;
+					if(random <= max && random > previous) {
+						dropped++;
+						if(!key.equalsIgnoreCase("nothing")) {
+							result.merge(key, 1, Integer::sum);
+						}
+						break;
+					}
+					previous = max;
 				}
-				previous = max;
 			}
 		}
 		n.update();
 		Location loc = n.getLoc().clone().add(0.5, 2, 0.5);
 		Block above = n.getLoc().clone().add(0, 1, 0).getBlock();
 		if(above != null && above.getType() == Material.HOPPER && above.getState() instanceof Hopper hopper) {
-			if(!deliverToHopper(n, hopper.getInventory(), items, result, loc)) return false;
+			if(!deliverToHopper(n, hopper.getInventory(), items, result, loc)) {
+				n.setPendingResult(result);
+				return false;
+			}
 		} else {
 			for(Map.Entry<String, Integer> entry : result.entrySet()) {
 				for(int count = 0; count < entry.getValue(); count++) {
@@ -96,6 +107,7 @@ public class ItemDropper {
 				}
 			}
 		}
+		n.setPendingResult(null);
 		n.setLastResult(result);
 		return true;
 	}
@@ -113,9 +125,9 @@ public class ItemDropper {
 				}
 				return false;
 			}
-			loc.getWorld().playSound(loc, Sound.ENTITY_ITEM_PICKUP, 0.5f, 1f);
 		}
 		unavailableRewardsLogged.remove("blocked:" + n.getId());
+		if(!result.isEmpty()) loc.getWorld().playSound(loc, Sound.ENTITY_ITEM_PICKUP, 0.5f, 1f);
 		return true;
 	}
 	public void dropItem(Location loc, String path, Boolean noV) {
