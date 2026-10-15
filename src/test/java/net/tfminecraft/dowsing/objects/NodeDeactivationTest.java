@@ -2,8 +2,10 @@ package net.tfminecraft.dowsing.objects;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.Map;
 import java.util.UUID;
 
 import org.junit.jupiter.api.AfterEach;
@@ -99,6 +101,33 @@ class NodeDeactivationTest {
 		assertFalse(node.getIsActive());
 		assertEquals(3, node.attempts);
 		assertEquals(0, node.getInputCounter());
+	}
+
+	@Test
+	void completedRefundsCancelHeldOutputButIncompleteRefundsKeepIt() {
+		RefundNode node = new RefundNode(2, 1);
+		node.setPendingResult(Map.of("v.STONE", 3));
+
+		node.deActivate();
+
+		assertEquals(1, node.getInputCounter());
+		assertEquals(Map.of("v.STONE", 3), node.getPendingResult());
+
+		node.successfulRefundsRemaining = 1;
+		node.deActivate();
+
+		assertEquals(0, node.getInputCounter());
+		assertNull(node.getPendingResult());
+	}
+
+	@Test
+	void heldOutputSurvivesDeactivationWhenNoInputsAreRefunded() {
+		RefundNode node = new RefundNode(0, 0);
+		node.setPendingResult(Map.of("v.STONE", 3));
+
+		node.deActivate();
+
+		assertEquals(Map.of("v.STONE", 3), node.getPendingResult());
 	}
 
 	@Test

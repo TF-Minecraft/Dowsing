@@ -503,12 +503,15 @@ public class Node {
 		this.isActive = false;
 		if(isClaimable()) return;
 		if(this.cycleTime >= 0 && this.cycleTime < Cache.cycleLength) {
+			boolean refunded = this.getInputCounter() > 0;
 			while(this.getInputCounter() > 0) {
 				int pendingInputs = this.getInputCounter();
 				refund();
 				// A missing barrel or hopper prevents refunds. Keep the pending inputs for retry.
 				if(this.getInputCounter() >= pendingInputs) break;
 			}
+			// Returning this cycle's inputs cancels its held output; incomplete refunds keep it.
+			if(refunded && this.getInputCounter() == 0) setPendingResult(null);
 		}
 		NodeManager.requestNodeBenefitSync();
 	}
