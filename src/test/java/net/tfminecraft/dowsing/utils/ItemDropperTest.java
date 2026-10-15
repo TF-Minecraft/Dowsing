@@ -18,9 +18,13 @@ import java.util.logging.Logger;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.Sound;
 import org.bukkit.World;
+import org.bukkit.block.Block;
+import org.bukkit.block.Hopper;
 import org.bukkit.entity.Item;
+import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.util.Vector;
 import org.junit.jupiter.api.AfterEach;
@@ -143,6 +147,59 @@ class ItemDropperTest {
 			dropper.dropItem(location, "present", true); verify(entity).setVelocity(new Vector());
 			verify(world, times(2)).dropItem(location, stack);
 		}
+	}
+
+	@Test
+	void outputGoesToTheHopperAboveTheNodeInsteadOfTheGround() {
+		World world = mock(World.class);
+		Location origin = new Location(world, 4, 60, 7);
+		Node node = nodeAt(origin, Map.of("v.STONE", 1.0), 3);
+		Inventory inventory = hopperAbove(world);
+		ItemStack existing = mock(ItemStack.class);
+		when(existing.clone()).thenReturn(mock(ItemStack.class));
+		when(inventory.getContents()).thenReturn(new ItemStack[] {existing, null, null, null, null});
+		when(inventory.addItem(any(ItemStack.class))).thenReturn(new HashMap<>());
+		ItemStack template = mock(ItemStack.class);
+		ItemStack delivered = mock(ItemStack.class);
+		when(template.clone()).thenReturn(delivered);
+		assertTrue(new ItemDropper(path -> template, message -> fail(message)).dropItems(node));
+		verify(delivered).setAmount(3);
+		verify(inventory).addItem(delivered);
+		verify(world, never()).dropItem(any(Location.class), any(ItemStack.class));
+		verify(world).playSound(new Location(world, 4.5, 62, 7.5), Sound.ENTITY_ITEM_PICKUP, 0.5f, 1f);
+		verify(node).setLastResult(Map.of("v.STONE", 3)); verify(node).update();
+		assertEquals(new Location(world, 4, 60, 7), origin);
+	}
+
+	@Test
+	void fullHopperHoldsTheCycleAndRestoresItsContents() {
+		World world = mock(World.class);
+		Node node = nodeAt(new Location(world, 4, 60, 7), Map.of("v.STONE", 1.0), 3);
+		Inventory inventory = hopperAbove(world);
+		ItemStack[] before = new ItemStack[5];
+		when(inventory.getContents()).thenReturn(before);
+		ItemStack template = mock(ItemStack.class);
+		ItemStack delivered = mock(ItemStack.class);
+		when(template.clone()).thenReturn(delivered);
+		when(inventory.addItem(any(ItemStack.class))).thenReturn(new HashMap<>(Map.of(0, delivered)));
+		List<String> warnings = new ArrayList<>();
+		ItemDropper dropper = new ItemDropper(path -> template, warnings::add);
+		assertFalse(dropper.dropItems(node)); assertFalse(dropper.dropItems(node));
+		verify(inventory, times(2)).setContents(before);
+		verify(node, never()).setLastResult(any());
+		verify(world, never()).dropItem(any(Location.class), any(ItemStack.class));
+		assertEquals(1, warnings.size()); assertTrue(warnings.getFirst().contains("output hopper is full"));
+	}
+
+	private Inventory hopperAbove(World world) {
+		Block block = mock(Block.class);
+		Hopper hopper = mock(Hopper.class);
+		Inventory inventory = mock(Inventory.class);
+		when(world.getBlockAt(any(Location.class))).thenReturn(block);
+		when(block.getType()).thenReturn(Material.HOPPER);
+		when(block.getState()).thenReturn(hopper);
+		when(hopper.getInventory()).thenReturn(inventory);
+		return inventory;
 	}
 
 	private Node nodeAt(Location location, Map<String, Double> drops, int yield) {

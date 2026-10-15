@@ -1,5 +1,6 @@
 package net.tfminecraft.dowsing.utils;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
@@ -8,8 +9,12 @@ import java.util.function.Function;
 import java.util.function.Consumer;
 
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.Sound;
+import org.bukkit.block.Block;
+import org.bukkit.block.Hopper;
 import org.bukkit.entity.Item;
+import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.util.Vector;
 
@@ -29,7 +34,12 @@ public class ItemDropper {
 		this.warning = warning;
 	}
 
-	/** Returns false when a configured reward cannot be created, so the cycle can retry. */
+	/**
+	 * Delivers output into the hopper above the node when one is present, so blocks
+	 * above the hopper cannot trap and despawn it. Returns false when a configured
+	 * reward cannot be created or the hopper cannot hold the output, so the cycle
+	 * can retry instead of losing items.
+	 */
 	public boolean dropItems(Node n) {
 		Map<String, ItemStack> items = new HashMap<>();
 		for(String key : n.getCompleteDrop().keySet()) {
@@ -74,14 +84,38 @@ public class ItemDropper {
 		}
 		n.update();
 		Location loc = n.getLoc().clone().add(0.5, 2, 0.5);
-		for(Map.Entry<String, Integer> entry : result.entrySet()) {
-			for(int count = 0; count < entry.getValue(); count++) {
-				Item e = loc.getWorld().dropItem(loc, items.get(entry.getKey()).clone());
-				e.setVelocity(new Vector());
-				loc.getWorld().playSound(loc, Sound.ENTITY_ITEM_PICKUP, 0.5f, 1f);
+		Block above = n.getLoc().clone().add(0, 1, 0).getBlock();
+		if(above != null && above.getType() == Material.HOPPER && above.getState() instanceof Hopper hopper) {
+			if(!deliverToHopper(n, hopper.getInventory(), items, result, loc)) return false;
+		} else {
+			for(Map.Entry<String, Integer> entry : result.entrySet()) {
+				for(int count = 0; count < entry.getValue(); count++) {
+					Item e = loc.getWorld().dropItem(loc, items.get(entry.getKey()).clone());
+					e.setVelocity(new Vector());
+					loc.getWorld().playSound(loc, Sound.ENTITY_ITEM_PICKUP, 0.5f, 1f);
+				}
 			}
 		}
 		n.setLastResult(result);
+		return true;
+	}
+	/** One transaction: a full hopper keeps its contents and the pending output for a later retry. */
+	private boolean deliverToHopper(Node n, Inventory inventory, Map<String, ItemStack> items, Map<String, Integer> result, Location loc) {
+		ItemStack[] before = Arrays.stream(inventory.getContents())
+				.map(item -> item == null ? null : item.clone()).toArray(ItemStack[]::new);
+		for(Map.Entry<String, Integer> entry : result.entrySet()) {
+			ItemStack stack = items.get(entry.getKey()).clone();
+			stack.setAmount(entry.getValue());
+			if(!inventory.addItem(stack).isEmpty()) {
+				inventory.setContents(before);
+				if(unavailableRewardsLogged.add("blocked:" + n.getId())) {
+					warning.accept("[Dowsing] Cannot complete node " + n.getId() + ": output hopper is full");
+				}
+				return false;
+			}
+			loc.getWorld().playSound(loc, Sound.ENTITY_ITEM_PICKUP, 0.5f, 1f);
+		}
+		unavailableRewardsLogged.remove("blocked:" + n.getId());
 		return true;
 	}
 	public void dropItem(Location loc, String path, Boolean noV) {
