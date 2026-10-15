@@ -55,6 +55,7 @@ public class Node {
 	Double costIncrease;
 	Map<String, Integer> lastResult = new HashMap<>();
 	Map<String, Integer> pendingResult;
+	boolean broken;
 	List<String> addedDrops = new ArrayList<String>();
 	List<String> errors = new ArrayList<String>();
 	Map<String, Double> completeDrop = new HashMap<>();
@@ -685,6 +686,9 @@ public class Node {
 		return 0;
 	}
 	public void breakNode() {
+		// Stale menus can repeat removal; the node item and held output must drop only once.
+		if(this.broken) return;
+		this.broken = true;
 		String path = this.getBlock().getBlock();
 		String type = path.split("\\.")[0];
 		if(type.equalsIgnoreCase("v")) {
@@ -698,9 +702,11 @@ public class Node {
 		Location loc = new Location(this.getLoc().getWorld(), this.getLoc().getX(), this.getLoc().getY(), this.getLoc().getZ());
 		loc.add(0.5,0,0.5);
 		ItemDropper dropper = new ItemDropper();
-		if(this.pendingResult != null) {
+		Map<String, Integer> heldOutput = this.pendingResult;
+		setPendingResult(null);
+		if(heldOutput != null) {
 			// Removing the node returns its held output instead of discarding it.
-			for(Map.Entry<String, Integer> entry : this.pendingResult.entrySet()) {
+			for(Map.Entry<String, Integer> entry : heldOutput.entrySet()) {
 				for(int count = 0; count < entry.getValue(); count++) {
 					dropper.dropItem(loc, entry.getKey(), false);
 				}

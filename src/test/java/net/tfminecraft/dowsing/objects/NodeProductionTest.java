@@ -211,12 +211,16 @@ class NodeProductionTest {
     }
 
     @Test
-    void breakingANodeReturnsItsHeldOutputItems() {
+    void breakingANodeReturnsItsHeldOutputItemsOnlyOnce() {
         Node node = f.node(); node.setPendingResult(Map.of("v.STONE", 2));
         try (var droppers = mockConstruction(ItemDropper.class)) {
             node.breakNode();
+            assertNull(node.getPendingResult());
+            // A stale second menu repeating the removal must not drop anything again.
+            node.breakNode();
             verify(droppers.constructed().getFirst(), times(2)).dropItem(new Location(f.world, 2.5, 64, 3.5), "v.STONE", false);
             verify(droppers.constructed().getFirst()).dropItem(new Location(f.world, 2.5, 64, 3.5), "v.IRON_BLOCK", false);
+            assertEquals(1, droppers.constructed().size());
         }
     }
 
