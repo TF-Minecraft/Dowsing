@@ -15,6 +15,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryView;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -54,6 +55,12 @@ class NodeRefundMenuTest {
 		when(click.getClickedInventory()).thenReturn(top);
 		when(view.getTopInventory()).thenReturn(top);
 		manager.currentNode.put(player, node);
+		NodeManager.nodes.add(node);
+	}
+
+	@AfterEach
+	void tearDown() {
+		NodeManager.nodes.remove(node);
 	}
 
 	@ParameterizedTest

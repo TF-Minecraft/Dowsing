@@ -225,6 +225,22 @@ class NodeProductionTest {
     }
 
     @Test
+    void brokenNodesCannotActivateDeactivateOrRefund() {
+        Node node = f.owned(); node.setIsActive(true); node.setInputCounter(2);
+        node.setPendingResult(Map.of("v.STONE", 1));
+        try (var droppers = mockConstruction(ItemDropper.class)) {
+            node.breakNode();
+        }
+        try (var engines = engines(true, true, true, true, true)) {
+            node.activate();
+            node.deActivate();
+            node.refund();
+            assertFalse(node.getIsActive()); assertEquals(2, node.getInputCounter());
+            assertTrue(engines.constructed().isEmpty());
+        }
+    }
+
+    @Test
     void furnitureRemovalSkipsUnrelatedEntitiesAndHandlesItemsAdderLookupFailures() {
         Node node = f.node(); when(f.block.getBlock()).thenReturn("ia.nodes:iron");
         when(f.worldBlock.getType()).thenReturn(Material.BARRIER);

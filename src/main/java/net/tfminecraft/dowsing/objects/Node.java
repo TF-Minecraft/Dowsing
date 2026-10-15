@@ -418,6 +418,7 @@ public class Node {
 		ng.takeInputs(this);
 	}
 	public void refund() {
+		if(this.broken) return;
 		NodeEngine ng = new NodeEngine();
 		Boolean failed = false;
 		this.errors.clear();
@@ -440,6 +441,7 @@ public class Node {
 		ng.refund(this);;
 	}
 	public void activate() {
+		if(this.broken) return;
 		if(hasPendingRefund()) {
 			deActivate();
 			return;
@@ -509,6 +511,8 @@ public class Node {
 	}
 	public void deActivate() {
 		this.isActive = false;
+		// A broken node is terminal: stale menus must not refund or restart it.
+		if(this.broken) return;
 		if(isClaimable()) return;
 		if(this.cycleTime >= 0 && this.cycleTime < Cache.cycleLength) {
 			boolean refunded = this.getInputCounter() > 0;
