@@ -488,6 +488,13 @@ public class Node {
 		if(failed) {
 			return;
 		}
+		if(this.pendingResult != null && !this.pendingResult.isEmpty()) {
+			// Settle held output before new inputs are taken, so a later refund cannot cancel it.
+			if(!new ItemDropper().dropItems(this)) {
+				this.errors.add("§7Held output does not fit in the hopper");
+				return;
+			}
+		}
 		this.isActive = true;
 		this.timeLeft = this.modifiedTime;
 		this.cycleTime = 0;
@@ -691,6 +698,14 @@ public class Node {
 		Location loc = new Location(this.getLoc().getWorld(), this.getLoc().getX(), this.getLoc().getY(), this.getLoc().getZ());
 		loc.add(0.5,0,0.5);
 		ItemDropper dropper = new ItemDropper();
+		if(this.pendingResult != null) {
+			// Removing the node returns its held output instead of discarding it.
+			for(Map.Entry<String, Integer> entry : this.pendingResult.entrySet()) {
+				for(int count = 0; count < entry.getValue(); count++) {
+					dropper.dropItem(loc, entry.getKey(), false);
+				}
+			}
+		}
 		dropper.dropItem(loc, path, false);
 		loc.getWorld().playSound(loc, Sound.ENTITY_GLOW_ITEM_FRAME_REMOVE_ITEM, 0.5f, 1f);
 		NodeManager.requestNodeBenefitSync();

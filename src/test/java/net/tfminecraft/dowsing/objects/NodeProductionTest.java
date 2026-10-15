@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 import java.util.List;
+import java.util.Map;
 
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -103,6 +104,27 @@ class NodeProductionTest {
     }
 
     @Test
+    void activationSettlesHeldOutputBeforeTakingNewInputs() {
+        Node node = f.owned(); node.setPendingResult(Map.of("v.STONE", 3));
+        boolean[] blocked = {true};
+        try (var engines = engines(true, true, true, true, true);
+             var droppers = mockConstruction(ItemDropper.class, (dropper, context) -> when(dropper.dropItems(node))
+                     .thenAnswer(inv -> { boolean wasBlocked = blocked[0]; blocked[0] = false; return !wasBlocked; }))) {
+            node.activate();
+            assertFalse(node.getIsActive());
+            assertEquals(List.of("§7Held output does not fit in the hopper"), node.getErrors());
+            assertEquals(Map.of("v.STONE", 3), node.getPendingResult());
+            for (NodeEngine engine : engines.constructed()) verify(engine, never()).takeInputs(any());
+            node.activate();
+            assertTrue(node.getIsActive(), node.getErrors().toString());
+            assertEquals(1, node.getInputCounter());
+            assertEquals(2, droppers.constructed().size());
+            for (ItemDropper dropper : droppers.constructed()) verify(dropper).dropItems(node);
+            verify(engines.constructed().getLast()).takeInputs(node);
+        }
+    }
+
+    @Test
     void unclaimedNodesCannotStartAndPendingRefundsAreRetriedBeforeStarting() {
         Node node = f.node();
         try (var engines = engines(true, true, true, true, true)) {
@@ -185,6 +207,16 @@ class NodeProductionTest {
             verify(f.worldBlock).setType(Material.AIR);
             verify(droppers.constructed().getFirst()).dropItem(new Location(f.world, 2.5, 64, 3.5), "v.IRON_BLOCK", false);
             verify(f.world).playSound(new Location(f.world, 2.5, 64, 3.5), Sound.ENTITY_GLOW_ITEM_FRAME_REMOVE_ITEM, 0.5f, 1f);
+        }
+    }
+
+    @Test
+    void breakingANodeReturnsItsHeldOutputItems() {
+        Node node = f.node(); node.setPendingResult(Map.of("v.STONE", 2));
+        try (var droppers = mockConstruction(ItemDropper.class)) {
+            node.breakNode();
+            verify(droppers.constructed().getFirst(), times(2)).dropItem(new Location(f.world, 2.5, 64, 3.5), "v.STONE", false);
+            verify(droppers.constructed().getFirst()).dropItem(new Location(f.world, 2.5, 64, 3.5), "v.IRON_BLOCK", false);
         }
     }
 
