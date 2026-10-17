@@ -142,6 +142,16 @@ class NodeBehaviorTest {
     }
 
     @Test
+    void guildNoticesReachOnlyOnlineMembersOfTheOwningGuild() {
+        var leader = f.server.addPlayer("Leader");
+        f.node().notifyGuild("§cunowned");
+        assertNull(leader.nextMessage());
+        f.owned().notifyGuild("§cnotice");
+        assertEquals("§cnotice", leader.nextMessage());
+        assertNull(leader.nextMessage());
+    }
+
+    @Test
     void deletedOwnerDuringResolutionLeavesTheNodeClaimable() {
         Node node = f.owned();
         f.factions.when(() -> FactionManager.getGuildByString("guild")).thenReturn(f.guild).thenReturn(null);

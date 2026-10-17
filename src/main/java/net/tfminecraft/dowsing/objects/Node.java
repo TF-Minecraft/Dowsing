@@ -153,7 +153,10 @@ public class Node {
 	public void setLastResult(Map<String, Integer> lastResult) {
 		this.lastResult = lastResult;
 	}
-	/** Rolled output that could not be delivered yet; null when no cycle output is waiting. */
+	/**
+	 * Rolled output that could not be delivered yet, such as one held by a full hopper
+	 * before overflow spilled; null when no cycle output is waiting.
+	 */
 	public Map<String, Integer> getPendingResult() {
 		return pendingResult;
 	}
@@ -383,6 +386,16 @@ public class Node {
 		NodeManager.requestNodeBenefitSync();
 	}
 
+	/** Sends a message to the owning guild's online members. */
+	public void notifyGuild(String message) {
+		Guild g = resolveGuild();
+		if(g == null) return;
+		for(String member : g.getMembers()) {
+			Player p = Members.player(member);
+			if(p != null) p.sendMessage(message);
+		}
+	}
+
 	public void tick() {
 		if(!isClaimable()) this.timeLeft = this.timeLeft-1;
 	}
@@ -494,7 +507,7 @@ public class Node {
 		if(this.pendingResult != null && !this.pendingResult.isEmpty()) {
 			// Settle held output before new inputs are taken, so a later refund cannot cancel it.
 			if(!new ItemDropper().dropItems(this)) {
-				this.errors.add("§7Held output does not fit in the hopper");
+				this.errors.add("§7Held output cannot be delivered yet");
 				return;
 			}
 		}
