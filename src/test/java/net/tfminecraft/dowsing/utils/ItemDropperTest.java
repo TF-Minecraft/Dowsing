@@ -75,11 +75,12 @@ class ItemDropperTest {
 	}
 
 	@Test
-	void successfulCyclesDropIndividualCopiesAtTheNodeAndRecordTheResult() {
+	void successfulCyclesDropFullStacksAtTheNodeAndRecordTheResult() {
 		World world = mock(World.class);
 		Location origin = new Location(world, 4, 60, 7);
 		Node node = nodeAt(origin, Map.of("v.STONE", 1.0), 3);
 		ItemStack template = mock(ItemStack.class);
+		// Unstackable output drops one item per entity; the sound plays once.
 		ItemStack first = mock(ItemStack.class), second = mock(ItemStack.class), third = mock(ItemStack.class);
 		when(template.clone()).thenReturn(first, second, third);
 		Item entity = mock(Item.class);
@@ -87,8 +88,9 @@ class ItemDropperTest {
 		assertTrue(new ItemDropper(path -> template, message -> fail(message)).dropItems(node));
 		Location drop = new Location(world, 4.5, 62, 7.5);
 		verify(world).dropItem(drop, first); verify(world).dropItem(drop, second); verify(world).dropItem(drop, third);
+		verify(first).setAmount(1); verify(second).setAmount(1); verify(third).setAmount(1);
 		verify(entity, times(3)).setVelocity(new Vector());
-		verify(world, times(3)).playSound(drop, Sound.ENTITY_ITEM_PICKUP, 0.5f, 1f);
+		verify(world, times(1)).playSound(drop, Sound.ENTITY_ITEM_PICKUP, 0.5f, 1f);
 		verify(node).setLastResult(Map.of("v.STONE", 3)); verify(node).update();
 		assertEquals(new Location(world, 4, 60, 7), origin);
 	}
@@ -176,6 +178,7 @@ class ItemDropperTest {
 		Node node = nodeAt(new Location(world, 4, 60, 7), Map.of("v.STONE", 1.0), 3);
 		Inventory inventory = hopperAbove(world);
 		ItemStack template = mock(ItemStack.class);
+		when(template.getMaxStackSize()).thenReturn(64);
 		ItemStack delivered = mock(ItemStack.class), spilled = mock(ItemStack.class);
 		when(template.clone()).thenReturn(delivered, spilled);
 		ItemStack leftover = mock(ItemStack.class);
@@ -187,10 +190,11 @@ class ItemDropperTest {
 		assertTrue(new ItemDropper(path -> template, warnings::add).dropItems(node));
 		Location top = new Location(world, 4.5, 62, 7.5);
 		verify(delivered).setAmount(3);
-		verify(world, times(2)).dropItem(top, spilled);
-		verify(entity, times(2)).setVelocity(new Vector());
-		// One sound for the item that reached the hopper, one per spilled item.
-		verify(world, times(3)).playSound(top, Sound.ENTITY_ITEM_PICKUP, 0.5f, 1f);
+		verify(spilled).setAmount(2);
+		verify(world).dropItem(top, spilled);
+		verify(entity).setVelocity(new Vector());
+		// One sound for the item that reached the hopper, one for the spill.
+		verify(world, times(2)).playSound(top, Sound.ENTITY_ITEM_PICKUP, 0.5f, 1f);
 		verify(node).setPendingResult(null); verify(node).setLastResult(Map.of("v.STONE", 3));
 		assertEquals(List.of("[Dowsing] Node " + node.getId() + " spilled 2 items past its full hopper at 4, 61, 7"), warnings);
 		verify(node).notifyGuild("§cThe hopper on your Iron node at 4, 61, 7 is full. 2 items spilled on top of it and may be lost.");
@@ -216,11 +220,29 @@ class ItemDropperTest {
 		when(inventory.addItem(copy)).thenReturn(new HashMap<>(), new HashMap<>(), new HashMap<>(),
 				new HashMap<>(), new HashMap<>(), new HashMap<>(Map.of(0, leftover)));
 		when(world.dropItem(any(Location.class), any(ItemStack.class))).thenReturn(mock(Item.class));
+		when(template.getMaxStackSize()).thenReturn(64);
 		assertTrue(new ItemDropper(path -> template, message -> {}).dropItems(node));
-		verify(copy, times(6)).setAmount(2); verify(copy, never()).setAmount(99);
-		verify(world, times(2)).dropItem(new Location(world, 4.5, 62, 7.5), copy);
+		// Six hopper stacks of 2 and one spilled stack of 2.
+		verify(copy, times(7)).setAmount(2); verify(copy, never()).setAmount(99);
+		verify(world).dropItem(new Location(world, 4.5, 62, 7.5), copy);
 		verify(node).setPendingResult(null); verify(node).setLastResult(held);
 		verify(node).notifyGuild(contains("2 items spilled"));
+	}
+
+	@Test
+	void largeLooseOutputDropsInMaxSizeStacksWithOneSound() {
+		World world = mock(World.class);
+		Node node = nodeAt(new Location(world, 4, 60, 7), Map.of("v.STONE", 1.0), 3);
+		when(node.getPendingResult()).thenReturn(Map.of("v.STONE", 130));
+		ItemStack template = mock(ItemStack.class);
+		when(template.getMaxStackSize()).thenReturn(64);
+		ItemStack first = mock(ItemStack.class), second = mock(ItemStack.class), rest = mock(ItemStack.class);
+		when(template.clone()).thenReturn(first, second, rest);
+		when(world.dropItem(any(Location.class), any(ItemStack.class))).thenReturn(mock(Item.class));
+		assertTrue(new ItemDropper(path -> template, message -> fail(message)).dropItems(node));
+		verify(first).setAmount(64); verify(second).setAmount(64); verify(rest).setAmount(2);
+		verify(world, times(3)).dropItem(any(Location.class), any(ItemStack.class));
+		verify(world, times(1)).playSound(any(Location.class), any(Sound.class), anyFloat(), anyFloat());
 	}
 
 	@Test

@@ -125,12 +125,17 @@ public class ItemDropper {
 		if(delivered > 0) loc.getWorld().playSound(loc, Sound.ENTITY_ITEM_PICKUP, 0.5f, 1f);
 		return spilled;
 	}
+	/** Drops full stacks with one sound, so a large overflow does not spawn an entity per item. */
 	private void dropLoose(Location loc, ItemStack item, int amount) {
-		for(int count = 0; count < amount; count++) {
-			Item e = loc.getWorld().dropItem(loc, item.clone());
+		if(amount <= 0) return;
+		int max = Math.max(1, item.getMaxStackSize());
+		for(int left = amount; left > 0; left -= max) {
+			ItemStack stack = item.clone();
+			stack.setAmount(Math.min(max, left));
+			Item e = loc.getWorld().dropItem(loc, stack);
 			e.setVelocity(new Vector());
-			loc.getWorld().playSound(loc, Sound.ENTITY_ITEM_PICKUP, 0.5f, 1f);
 		}
+		loc.getWorld().playSound(loc, Sound.ENTITY_ITEM_PICKUP, 0.5f, 1f);
 	}
 	private void warnSpill(Node n, Block hopper, int spilled) {
 		String where = hopper.getX() + ", " + hopper.getY() + ", " + hopper.getZ();
