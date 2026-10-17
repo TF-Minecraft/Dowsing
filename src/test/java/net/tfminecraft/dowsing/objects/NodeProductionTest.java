@@ -112,7 +112,7 @@ class NodeProductionTest {
                      .thenAnswer(inv -> { boolean wasBlocked = blocked[0]; blocked[0] = false; return !wasBlocked; }))) {
             node.activate();
             assertFalse(node.getIsActive());
-            assertEquals(List.of("§7Held output does not fit in the hopper"), node.getErrors());
+            assertEquals(List.of("§7Held output cannot be delivered yet"), node.getErrors());
             assertEquals(Map.of("v.STONE", 3), node.getPendingResult());
             for (NodeEngine engine : engines.constructed()) verify(engine, never()).takeInputs(any());
             node.activate();

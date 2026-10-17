@@ -1,6 +1,5 @@
 package net.tfminecraft.dowsing.utils;
 
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -37,9 +36,9 @@ public class ItemDropper {
 
 	/**
 	 * Delivers output into the hopper above the node when one is present, so blocks
-	 * above the hopper cannot trap and despawn it. Returns false when a configured
-	 * reward cannot be created or the hopper cannot hold the output, so the cycle
-	 * can retry instead of losing items.
+	 * above the hopper cannot trap and despawn it. Output that does not fit spills on
+	 * top of the hopper and the guild is warned. Returns false when a configured reward
+	 * cannot be created, so the cycle can retry instead of losing items.
 	 */
 	public boolean dropItems(Node n) {
 		Map<String, Integer> pending = n.getPendingResult();
@@ -94,41 +93,52 @@ public class ItemDropper {
 		Location loc = n.getLoc().clone().add(0.5, 2, 0.5);
 		Block above = n.getLoc().clone().add(0, 1, 0).getBlock();
 		if(above != null && above.getType() == Material.HOPPER && above.getState() instanceof Hopper hopper) {
-			if(!deliverToHopper(n, hopper.getInventory(), items, result, loc)) {
-				n.setPendingResult(result);
-				return false;
-			}
+			int spilled = deliverToHopper(hopper.getInventory(), items, result, loc);
+			if(spilled > 0) warnSpill(n, above, spilled);
 		} else {
 			for(Map.Entry<String, Integer> entry : result.entrySet()) {
-				for(int count = 0; count < entry.getValue(); count++) {
-					Item e = loc.getWorld().dropItem(loc, items.get(entry.getKey()).clone());
-					e.setVelocity(new Vector());
-					loc.getWorld().playSound(loc, Sound.ENTITY_ITEM_PICKUP, 0.5f, 1f);
-				}
+				dropLoose(loc, items.get(entry.getKey()), entry.getValue());
 			}
 		}
 		n.setPendingResult(null);
 		n.setLastResult(result);
 		return true;
 	}
-	/** One transaction: a full hopper keeps its contents and the pending output for a later retry. */
-	private boolean deliverToHopper(Node n, Inventory inventory, Map<String, ItemStack> items, Map<String, Integer> result, Location loc) {
-		ItemStack[] before = Arrays.stream(inventory.getContents())
-				.map(item -> item == null ? null : item.clone()).toArray(ItemStack[]::new);
+	/**
+	 * Fills the hopper with what fits and spills the rest on top of it, where the hopper
+	 * can still pull it in as it drains. Returns how many items spilled.
+	 */
+	private int deliverToHopper(Inventory inventory, Map<String, ItemStack> items, Map<String, Integer> result, Location loc) {
+		int delivered = 0;
+		int spilled = 0;
 		for(Map.Entry<String, Integer> entry : result.entrySet()) {
 			ItemStack stack = items.get(entry.getKey()).clone();
 			stack.setAmount(entry.getValue());
-			if(!inventory.addItem(stack).isEmpty()) {
-				inventory.setContents(before);
-				if(unavailableRewardsLogged.add("blocked:" + n.getId())) {
-					warning.accept("[Dowsing] Cannot complete node " + n.getId() + ": output hopper is full");
-				}
-				return false;
+			int left = 0;
+			for(ItemStack leftover : inventory.addItem(stack).values()) {
+				left += leftover.getAmount();
 			}
+			dropLoose(loc, items.get(entry.getKey()), left);
+			delivered += entry.getValue() - left;
+			spilled += left;
 		}
-		unavailableRewardsLogged.remove("blocked:" + n.getId());
-		if(!result.isEmpty()) loc.getWorld().playSound(loc, Sound.ENTITY_ITEM_PICKUP, 0.5f, 1f);
-		return true;
+		if(delivered > 0) loc.getWorld().playSound(loc, Sound.ENTITY_ITEM_PICKUP, 0.5f, 1f);
+		return spilled;
+	}
+	private void dropLoose(Location loc, ItemStack item, int amount) {
+		for(int count = 0; count < amount; count++) {
+			Item e = loc.getWorld().dropItem(loc, item.clone());
+			e.setVelocity(new Vector());
+			loc.getWorld().playSound(loc, Sound.ENTITY_ITEM_PICKUP, 0.5f, 1f);
+		}
+	}
+	private void warnSpill(Node n, Block hopper, int spilled) {
+		String where = hopper.getX() + ", " + hopper.getY() + ", " + hopper.getZ();
+		String count = spilled + (spilled == 1 ? " item" : " items");
+		warning.accept("[Dowsing] Node " + n.getId() + " spilled " + count + " past its full hopper at " + where);
+		n.notifyGuild("§cThe hopper on your " + n.getBlock().getResource() + " node at " + where + " is full. "
+				+ count + " spilled on top of it and may be lost.");
+		n.notifyGuild("§7Have the hopper feed into a chest or barrel so the output has room.");
 	}
 	public void dropItem(Location loc, String path, Boolean noV) {
 		ItemCreator ic = new ItemCreator();
