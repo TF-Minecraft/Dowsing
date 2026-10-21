@@ -99,19 +99,19 @@ runestone_focus:
     cost:
         - m.currency.enchanted_dust(4)
 artifact_focus:
-    weight: 3
+    weight: 1
     prerequisite: diamond_tools
     item:
-        name: "§dArtifact Recovery"
-        material: m.loot.staff_runestone
+        name: "§dArtifact Mine"
+        material: ia.tfmc_magic:cerrith_gem_165
     effects:
         - prestige(8)
         - time_modifier(100)
-        - upkeep(10)
-        - add_drop(magic.(rarity=common),70)
-        - add_drop(magic.(rarity=uncommon),20)
-        - add_drop(magic.(rarity=rare),8)
-        - add_drop(magic.(rarity=legendary),2)
+        - upkeep(20)
+        - add_drop(magic.(rarity=common),65)
+        - add_drop(magic.(rarity=uncommon),25)
+        - add_drop(magic.(rarity=rare),7)
+        - add_drop(magic.(rarity=legendary),3)
     cost:
         - m.currency.enchanted_dust(4)
 crystal_shard_focus:
@@ -982,4 +982,4 @@ act3_1:
         material: m.materials.mythrilite
     effects:
         - prestige(0)
-        - add_drop(nothing,100)
+        - add_drop(nothing,100)
