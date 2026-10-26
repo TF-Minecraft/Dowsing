@@ -86,6 +86,21 @@ class NodeManagerCyclesTest {
         NodeManager.extraCapacityByGuild.put("guild", 2); assertEquals(4, NodeManager.getNodeCapacity(f.guild));
         assertTrue(NodeManager.canPurchaseCapacity(f.guild)); NodeManager.extraCapacityByGuild.put("guild", 3);
         assertFalse(NodeManager.canPurchaseCapacity(f.guild));
+        when(f.guild.isHeld()).thenReturn(true);
+        assertEquals(0, NodeManager.getTotalUpkeep(f.guild));
+    }
+
+    @Test
+    void aHeldRealmsNodesPauseInsteadOfProducing() {
+        Node held = f.nodeAt(f.location);
+        when(held.getIsActive()).thenReturn(true); when(held.getGuild()).thenReturn(f.guild);
+        when(f.guild.isHeld()).thenReturn(true);
+        NodeManager.nodes.add(held);
+        try (Cycles cycles = new Cycles(); var droppers = mockConstruction(ItemDropper.class)) {
+            f.manager.start(); cycles.tasks.get(1200L).run();
+            verify(held, never()).tickCycle(); verify(held, never()).tick(); assertTrue(droppers.constructed().isEmpty());
+            verify(f.chunk, never()).setForceLoaded(true);
+        }
     }
 
     @Test

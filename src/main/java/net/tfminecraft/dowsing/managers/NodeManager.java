@@ -103,7 +103,7 @@ public class NodeManager implements Listener{
 	}
 
 	public static double getTotalUpkeep(Guild g) {
-		if (g == null) return 0;
+		if (g == null || Node.held(g)) return 0;
 		double total = 0;
 		for (Node n : nodes) {
 			if (!n.getIsActive() || !n.hasGuild()) continue;
@@ -167,6 +167,8 @@ public class NodeManager implements Listener{
 						try {
 						if(!n.getIsActive()) continue;
 						if(!n.hasGuild()) continue;
+						// A held realm's nodes pause until it is taken on.
+						if(Node.held(n.getGuild())) continue;
 						if(n.getLoc().getChunk().isForceLoaded() == false) {
 							n.getLoc().getChunk().setForceLoaded(true);
 						}

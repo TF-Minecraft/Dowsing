@@ -158,7 +158,7 @@ class NodeBehaviorTest {
     @Test
     void simpleFactionsWithoutHeldRealmsFallsBackToTheMemberRule() {
         when(f.guild.isHeld()).thenThrow(new NoSuchMethodError("isHeld"));
-        assertFalse(Node.held(f.guild));
+        assertFalse(Node.held(f.guild)); assertFalse(Node.held(null));
         Node node = f.owned();
         assertTrue(node.canHold(f.guild));
         when(f.guild.getMembers()).thenReturn(List.of());

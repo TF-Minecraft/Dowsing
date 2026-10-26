@@ -288,13 +288,13 @@ public class Node {
 	}
 
 	/**
-	 * A realm SimpleFactions holds after its last member died keeps its nodes, so they wait for its
-	 * revived leader or will heir instead of going to whoever claims them first. A closed realm's
-	 * guild is gone, which frees them. SimpleFactions before 4.7.0 has no held realms.
+	 * A realm SimpleFactions holds after its last member died keeps its nodes, paused like its other
+	 * upkeep, so they wait for its revived leader or will heir instead of going to whoever claims them
+	 * first. A closed realm's guild is gone, which frees them. SimpleFactions before 4.7.0 has no held realms.
 	 */
-	static boolean held(Guild g) {
+	public static boolean held(Guild g) {
 		try {
-			return g.isHeld();
+			return g != null && g.isHeld();
 		} catch (LinkageError olderSimpleFactions) {
 			return false;
 		}
