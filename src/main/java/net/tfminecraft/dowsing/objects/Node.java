@@ -279,11 +279,25 @@ public class Node {
 
 	public boolean canHold(Guild g){
 		if(g == null) return false;
+		if(held(g)) return true;
 		Player p = Members.player(g.getLeader());
 		if(p != null && p.isOnline() && Permissions.isAdmin(p)) return true;
 		if(g.getMembers().size() < Cache.minMembersForNode) return false;
 		if(NodeManager.getNodeAmount(g)-NodeManager.getNodeCapacity(g) > 0) return false;
 		return true;
+	}
+
+	/**
+	 * A realm SimpleFactions holds after its last member died keeps its nodes, paused like its other
+	 * upkeep, so they wait for its revived leader or will heir instead of going to whoever claims them
+	 * first. A closed realm's guild is gone, which frees them. SimpleFactions before 4.7.0 has no held realms.
+	 */
+	public static boolean held(Guild g) {
+		try {
+			return g != null && g.isHeld();
+		} catch (LinkageError olderSimpleFactions) {
+			return false;
+		}
 	}
 
 	public boolean canClaim(Player p, Guild g){
@@ -542,7 +556,8 @@ public class Node {
 	}
 
 	public void growEfficiency() {
-		if(resolveGuild() == null) return;
+		// A held realm has no members, which would cap its nodes' efficiency at 0 until it is taken on.
+		if(resolveGuild() == null || held(guild)) return;
 		int members = guild.getMembers().size();
 		double growth = Math.min(1.0, members*Cache.efficiencyGrowthPerMember);
 		updateEfficiency(growth);
