@@ -150,6 +150,9 @@ class NodeBehaviorTest {
         assertTrue(node.canHold(f.guild));
         node.check();
         assertSame(f.guild, node.getGuild()); assertFalse(node.isClaimable());
+        Node efficient = new Node(UUID.randomUUID(), f.block, f.location, f.guild, true, 1, 0, f.type, 60, 0, 25);
+        efficient.growEfficiency();
+        assertEquals(25, efficient.getEfficiency());
         when(f.guild.isHeld()).thenReturn(false);
         node.check();
         assertTrue(node.isClaimable());

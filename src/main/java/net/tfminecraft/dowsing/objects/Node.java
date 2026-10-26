@@ -556,7 +556,8 @@ public class Node {
 	}
 
 	public void growEfficiency() {
-		if(resolveGuild() == null) return;
+		// A held realm has no members, which would cap its nodes' efficiency at 0 until it is taken on.
+		if(resolveGuild() == null || held(guild)) return;
 		int members = guild.getMembers().size();
 		double growth = Math.min(1.0, members*Cache.efficiencyGrowthPerMember);
 		updateEfficiency(growth);
