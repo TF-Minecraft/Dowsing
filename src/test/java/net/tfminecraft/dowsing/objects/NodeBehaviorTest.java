@@ -142,6 +142,30 @@ class NodeBehaviorTest {
     }
 
     @Test
+    void aHeldRealmKeepsItsNodeWithNoMembersAndLosesItOnceNoLongerHeld() {
+        Node node = f.owned();
+        when(f.guild.getMembers()).thenReturn(List.of());
+        when(f.guild.getLeader()).thenReturn("");
+        when(f.guild.isHeld()).thenReturn(true);
+        assertTrue(node.canHold(f.guild));
+        node.check();
+        assertSame(f.guild, node.getGuild()); assertFalse(node.isClaimable());
+        when(f.guild.isHeld()).thenReturn(false);
+        node.check();
+        assertTrue(node.isClaimable());
+    }
+
+    @Test
+    void simpleFactionsWithoutHeldRealmsFallsBackToTheMemberRule() {
+        when(f.guild.isHeld()).thenThrow(new NoSuchMethodError("isHeld"));
+        assertFalse(Node.held(f.guild));
+        Node node = f.owned();
+        assertTrue(node.canHold(f.guild));
+        when(f.guild.getMembers()).thenReturn(List.of());
+        assertFalse(node.canHold(f.guild));
+    }
+
+    @Test
     void guildNoticesReachOnlyOnlineMembersOfTheOwningGuild() {
         var leader = f.server.addPlayer("Leader");
         f.node().notifyGuild("§cunowned");

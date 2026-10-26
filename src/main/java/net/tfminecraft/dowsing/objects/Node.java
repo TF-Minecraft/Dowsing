@@ -279,11 +279,25 @@ public class Node {
 
 	public boolean canHold(Guild g){
 		if(g == null) return false;
+		if(held(g)) return true;
 		Player p = Members.player(g.getLeader());
 		if(p != null && p.isOnline() && Permissions.isAdmin(p)) return true;
 		if(g.getMembers().size() < Cache.minMembersForNode) return false;
 		if(NodeManager.getNodeAmount(g)-NodeManager.getNodeCapacity(g) > 0) return false;
 		return true;
+	}
+
+	/**
+	 * A realm SimpleFactions holds after its last member died keeps its nodes, so they wait for its
+	 * revived leader or will heir instead of going to whoever claims them first. A closed realm's
+	 * guild is gone, which frees them. SimpleFactions before 4.7.0 has no held realms.
+	 */
+	static boolean held(Guild g) {
+		try {
+			return g.isHeld();
+		} catch (LinkageError olderSimpleFactions) {
+			return false;
+		}
 	}
 
 	public boolean canClaim(Player p, Guild g){
