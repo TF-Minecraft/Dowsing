@@ -206,6 +206,7 @@ class ItemCreatorTest {
                 Map.entry("time_modifier(-5)", "§eTime Modifier: §a-5.0%"),
                 Map.entry("yield(2)", "§eBase Yield: §a+2"), Map.entry("yield(-2)", "§eBase Yield: §c-2"),
                 Map.entry("yield_percent(2.5)", "§eYield: §a+2.5%"), Map.entry("yield_percent(-2)", "§eYield: §c-2%"),
+                Map.entry("max_yield(1)", "§eMax Yield: §f1"),
                 Map.entry("prestige(2)", "§9Prestige: §f+2"), Map.entry("prestige(-2)", "§9Prestige: §c-2"),
                 Map.entry("extraction(2)", "§eExtraction: §f+2"), Map.entry("extraction(-2)", "§eExtraction: §c-2"),
                 Map.entry("upkeep(1.234)", "§eUpkeep: §f1.23d"), Map.entry("other(2)", "other(2)"));

@@ -4,7 +4,9 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
+import java.io.InputStreamReader;
 import java.lang.reflect.Field;
+import java.nio.charset.StandardCharsets;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -74,6 +76,15 @@ class ConfiguredModelsTest {
         TypeLoader.clear(); TypeLoader.getNodeTypes().addAll(types);
         BlockLoader.clear(); BlockLoader.getNodeBlocks().addAll(blocks);
         for (var entry : globals.entrySet()) entry.getKey().set(null, entry.getValue());
+    }
+
+    @Test
+    void shippedArtifactFocusCapsItsYieldAtOne() throws Exception {
+        try (var reader = new InputStreamReader(
+                getClass().getResourceAsStream("/production_methods.yml"), StandardCharsets.UTF_8)) {
+            YamlConfiguration config = YamlConfiguration.loadConfiguration(reader);
+            assertTrue(config.getStringList("artifact_focus.effects").contains("max_yield(1)"));
+        }
     }
 
     @Test

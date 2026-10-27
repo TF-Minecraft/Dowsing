@@ -95,6 +95,33 @@ class NodeBehaviorTest {
     }
 
     @Test
+    void maxYieldCapsTheFinalYieldAndTheLowestCapWins() {
+        Node node = f.node();
+        assertNull(node.getMaxYield());
+        node.setYield(1); node.runEffect("yield_percent(120)"); assertEquals(2, node.getYield());
+        node.runEffect("max_yield(3)"); assertEquals(3, node.getMaxYield()); assertEquals(2, node.getYield());
+        node.runEffect("max_yield(1)"); node.runEffect("max_yield(4)");
+        assertEquals(1, node.getMaxYield()); assertEquals(1, node.getYield());
+        node.runEffect("max_yield(-2)"); assertEquals(0, node.getYield());
+    }
+
+    @Test
+    void artifactFocusKeepsOneItemWhateverTheToolAndOtherFocusesKeepTheirBonus() {
+        Node node = f.owned();
+        ProductionMethod tool = mock(ProductionMethod.class); NodeSlot toolSlot = mock(NodeSlot.class);
+        ProductionMethod focus = mock(ProductionMethod.class); NodeSlot focusSlot = mock(NodeSlot.class);
+        when(toolSlot.getActivePm()).thenReturn(tool); when(focusSlot.getActivePm()).thenReturn(focus);
+        when(tool.getEffects()).thenReturn(List.of("yield_percent(120)", "time_modifier(-10)"));
+        when(f.type.getSlots()).thenReturn(List.of(toolSlot, focusSlot));
+        when(f.level.getEffects()).thenReturn(List.of("yield(1)"));
+        when(focus.getEffects()).thenReturn(List.of("max_yield(1)", "add_drop(v.STONE,1)"));
+        node.update(); assertEquals(1, node.getYield());
+        // Switching to an uncapped focus clears the cap on the next update.
+        when(focus.getEffects()).thenReturn(List.of("yield(5)", "add_drop(v.STONE,1)"));
+        node.update(); assertNull(node.getMaxYield()); assertEquals(13, node.getYield());
+    }
+
+    @Test
     void guildResolutionRefreshesTheLiveOwnerAndDropsDeletedGuilds() {
         Node node = f.node();
         assertTrue(node.isClaimable()); assertFalse(node.hasGuild());
