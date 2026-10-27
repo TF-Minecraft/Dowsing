@@ -59,11 +59,12 @@ quartz_focus:
 dust_focus:
     weight: 0
     item:
-        name: "§dDust Production"
+        name: "§dDust Mine"
         material: m.currency.enchanted_dust
     effects:
-        - yield(4)
-        - upkeep(5)
+        - yield(5)
+        - time_modifier(40)
+        - upkeep(10)
         - add_drop(m.currency.enchanted_dust,100)
 crystal_focus:
     weight: 1
