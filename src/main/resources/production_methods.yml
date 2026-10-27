@@ -105,6 +105,7 @@ artifact_focus:
         name: "§dArtifact Mine"
         material: ia.tfmc_magic:cerrith_gem_165
     effects:
+        - max_yield(1)
         - prestige(8)
         - time_modifier(100)
         - upkeep(20)

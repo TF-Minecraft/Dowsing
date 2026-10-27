@@ -387,6 +387,8 @@ public class ItemCreator {
 			} else {
 				s = s+"§c"+formatYieldPercent(amount)+"%";
 			}
+		} else if(type.equalsIgnoreCase("max_yield")) {
+			s = "§eMax Yield: §f"+Integer.parseInt(effect);
 		} else if(type.equalsIgnoreCase("prestige")) {
 			Double amount = Double.parseDouble(effect);
 			s = "§9Prestige: ";

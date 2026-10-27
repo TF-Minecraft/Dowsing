@@ -48,6 +48,8 @@ public class Node {
 	Integer modifiedTime;
 	Integer yield;
 	Double yieldPercent;
+	// Cap on items per cycle from max_yield effects; null means uncapped.
+	Integer maxYield;
 	Double wealthModifier;
 	Double prestigeGain;
 	NodeType currentType;
@@ -178,7 +180,11 @@ public class Node {
 	public Integer getYield() {
 		double base = yield == null ? 0 : yield;
 		double percent = yieldPercent == null ? 0.0 : yieldPercent;
-		return Math.max(0, (int) Math.round(base * (1.0 + percent / 100.0)));
+		int total = Math.max(0, (int) Math.round(base * (1.0 + percent / 100.0)));
+		return maxYield == null ? total : Math.min(total, Math.max(0, maxYield));
+	}
+	public Integer getMaxYield() {
+		return maxYield;
 	}
 	public Integer getBaseYield() {
 		return yield == null ? 0 : yield;
@@ -588,6 +594,7 @@ public class Node {
 		if(isClaimable()) return;
 		this.yield = 0;
 		this.yieldPercent = 0.0;
+		this.maxYield = null;
 		this.timeModifier = 0.0;
 		this.addedDrops = new ArrayList<String>();
 		this.extraction = 0;
@@ -688,6 +695,9 @@ public class Node {
 			yield = yield+Integer.parseInt(e.split("\\(")[1].replace(")", ""));
 		} else if(type.equalsIgnoreCase("yield_percent")) {
 			yieldPercent = yieldPercent+Double.parseDouble(e.split("\\(")[1].replace(")", ""));
+		} else if(type.equalsIgnoreCase("max_yield")) {
+			int cap = Integer.parseInt(e.split("\\(")[1].replace(")", ""));
+			maxYield = maxYield == null ? cap : Math.min(maxYield, cap);
 		} else if(type.equalsIgnoreCase("add_drop")) {
 			String[] drop = DropPaths.parseAddDropEffect(e);
 			if(drop != null) {
