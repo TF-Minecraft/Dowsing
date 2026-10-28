@@ -82,27 +82,33 @@ public class Node {
 	 * since members joining or capacity being bought does not refresh every node.
 	 */
 	public double getDailyUpkeep() {
-		return dailyUpkeep(currentCostIncrease());
+		BigDecimal base = baseUpkeep();
+		return dailyUpkeep(base, currentCostIncrease());
 	}
 	/**
 	 * {@link #getDailyUpkeep()} with the guild's node count supplied by the caller, so a guild
-	 * total counts its nodes once instead of once per node. The count is only asked for when this
-	 * node's guild resolves, exactly when {@link #currentCostIncrease()} would count.
+	 * total counts its nodes once instead of once per node. Same steps in the same order: the
+	 * base upkeep, then the guild, then the count, which is only asked for when the guild resolves.
 	 */
 	public double getDailyUpkeep(IntSupplier nodeAmount) {
-		if(resolveGuild() == null) return getDailyUpkeep();
-		return dailyUpkeep(costIncreaseFor(nodeAmount.getAsInt(), getCapacity()));
+		BigDecimal base = baseUpkeep();
+		if(resolveGuild() == null) return dailyUpkeep(base, storedCostIncrease());
+		return dailyUpkeep(base, costIncreaseFor(nodeAmount.getAsInt(), getCapacity()));
 	}
-	private double dailyUpkeep(double costIncrease) {
-		double base = upkeep == null ? 0.0 : upkeep;
-		return BigDecimal.valueOf(base)
-				.multiply(BigDecimal.valueOf(costIncrease))
+	private BigDecimal baseUpkeep() {
+		return BigDecimal.valueOf(upkeep == null ? 0.0 : upkeep);
+	}
+	private static double dailyUpkeep(BigDecimal base, double costIncrease) {
+		return base.multiply(BigDecimal.valueOf(costIncrease))
 				.setScale(2, RoundingMode.HALF_UP)
 				.doubleValue();
 	}
 	double currentCostIncrease() {
-		if(resolveGuild() == null) return costIncrease == null ? 1.0 : costIncrease;
+		if(resolveGuild() == null) return storedCostIncrease();
 		return costIncreaseFor(NodeManager.getNodeAmount(this.guild), getCapacity());
+	}
+	private double storedCostIncrease() {
+		return costIncrease == null ? 1.0 : costIncrease;
 	}
 	static double costIncreaseFor(int nodeAmount, int capacity) {
 		int multiplier = Math.max(1, 1+nodeAmount-capacity);
