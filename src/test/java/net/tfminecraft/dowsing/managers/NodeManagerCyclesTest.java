@@ -187,6 +187,26 @@ class NodeManagerCyclesTest {
     }
 
     @Test
+    void aRealCheckThatLetsANodeGoLowersItsGuildsCountForTheRestOfThePass() {
+        Cache.extraCapacity = false;
+        Node first = new Node(UUID.randomUUID(), f.block, f.location, f.guild, true, 1, 0, f.type, 60, 0, 25);
+        Node second = new Node(UUID.randomUUID(), f.block, f.location, f.guild, true, 1, 0, f.type, 60, 0, 25);
+        NodeManager.nodes.addAll(List.of(first, second));
+        assertEquals(1, NodeManager.getNodeCapacity(f.guild));
+        NodeManager.beginCountPass();
+        try {
+            assertEquals(2, NodeManager.getNodeAmount(f.guild));
+            first.check();
+            assertTrue(first.isClaimable(), "over capacity, so the first node is let go");
+            assertEquals(1, NodeManager.getNodeAmount(f.guild), "Node.check lowers the pass count");
+            second.check();
+            assertFalse(second.isClaimable(), "back within capacity, so the second node stays");
+        } finally {
+            NodeManager.endCountPass();
+        }
+    }
+
+    @Test
     void timersUseTheirIntendedCadenceAndRunParticlesChecksAndEfficiencyGrowth() {
         Node claimed = f.node, unclaimed = f.nodeAt(f.location);
         when(unclaimed.isClaimable()).thenReturn(true); NodeManager.nodes.addAll(List.of(claimed, unclaimed));
