@@ -106,10 +106,14 @@ public class NodeManager implements Listener{
 	public static double getTotalUpkeep(Guild g) {
 		if (g == null || Node.held(g)) return 0;
 		double total = 0;
+		// Every node of g pays the same cost increase, so count g's nodes at most once, and only
+		// when a node first needs the count.
+		int[] amount = {-1};
+		java.util.function.IntSupplier count = () -> amount[0] >= 0 ? amount[0] : (amount[0] = getNodeAmount(g));
 		for (Node n : nodes) {
 			if (!n.getIsActive() || !n.hasGuild()) continue;
 			if (!n.getGuild().getId().equalsIgnoreCase(g.getId())) continue;
-			total += n.getDailyUpkeep();
+			total += n.getDailyUpkeep(count);
 		}
 		return total;
 	}

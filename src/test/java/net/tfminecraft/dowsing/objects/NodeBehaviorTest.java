@@ -237,8 +237,11 @@ class NodeBehaviorTest {
         node.setUpkeep(0.29); node.setCostIncrease(1.5); assertEquals(0.44, node.getDailyUpkeep());
         node.setGuild(f.guild); NodeManager.nodes.add(node); NodeManager.nodes.add(f.owned());
         assertEquals(1.5, node.currentCostIncrease()); assertEquals(0.44, node.getDailyUpkeep());
+        assertEquals(node.getDailyUpkeep(), node.getDailyUpkeep(() -> NodeManager.getNodeAmount(f.guild)));
+        assertEquals(0.58, node.getDailyUpkeep(() -> 3), "a counted amount gives the same cost formula");
         Cache.extraCapacity = true; Cache.membersPerCapacity = 2; Cache.maxMemberCapacity = 5;
         assertEquals(2, node.getCapacity()); assertEquals(0.29, node.getDailyUpkeep());
+        assertEquals(node.getDailyUpkeep(), node.getDailyUpkeep(() -> NodeManager.getNodeAmount(f.guild)));
         Cache.extraCapacityCost = 12.345;
         NodeManager.extraCapacityByGuild.put("guild", 2);
         assertEquals(37.04, node.getNodeCapacityCost());
