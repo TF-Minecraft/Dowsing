@@ -160,6 +160,33 @@ class NodeManagerCyclesTest {
     }
 
     @Test
+    void aParticlePassCountsEachGuildOnceAndTracksNodesLetGo() {
+        Node second = f.nodeAt(f.location), unowned = f.nodeAt(f.location), other = f.nodeAt(f.location), special = f.nodeAt(f.location), noId = f.nodeAt(f.location);
+        when(unowned.hasGuild()).thenReturn(false);
+        Guild otherGuild = mock(Guild.class); when(otherGuild.getId()).thenReturn("OTHER"); when(other.getGuild()).thenReturn(otherGuild);
+        NodeBlock specialBlock = mock(NodeBlock.class); when(specialBlock.isSpecial()).thenReturn(true); when(special.getBlock()).thenReturn(specialBlock);
+        Guild idless = mock(Guild.class); when(noId.getGuild()).thenReturn(idless);
+        NodeManager.nodes.addAll(List.of(f.node, second, unowned, other, special));
+        assertEquals(2, NodeManager.getNodeAmount(f.guild));
+        NodeManager.nodes.add(noId); // the live walk throws on a guild without an id; a pass skips it
+        NodeManager.beginCountPass();
+        try {
+            assertEquals(2, NodeManager.getNodeAmount(f.guild)); assertEquals(1, NodeManager.getNodeAmount(otherGuild));
+            assertEquals(0, NodeManager.getNodeAmount(idless)); assertEquals(0, NodeManager.getNodeAmount(null));
+            when(f.node.hasGuild()).thenReturn(false);
+            assertEquals(2, NodeManager.getNodeAmount(f.guild), "counted once at the start of the pass");
+            NodeManager.released(f.guild, f.node); assertEquals(1, NodeManager.getNodeAmount(f.guild));
+            NodeManager.released(f.guild, special); NodeManager.released(null, f.node); NodeManager.released(idless, f.node);
+            Guild unknown = mock(Guild.class); when(unknown.getId()).thenReturn("unknown"); NodeManager.released(unknown, f.node);
+            assertEquals(1, NodeManager.getNodeAmount(f.guild)); assertEquals(0, NodeManager.getNodeAmount(unknown));
+        } finally {
+            NodeManager.endCountPass();
+        }
+        NodeManager.nodes.remove(noId); NodeManager.released(f.guild, second);
+        assertEquals(1, NodeManager.getNodeAmount(f.guild), "live again once the pass ends");
+    }
+
+    @Test
     void timersUseTheirIntendedCadenceAndRunParticlesChecksAndEfficiencyGrowth() {
         Node claimed = f.node, unclaimed = f.nodeAt(f.location);
         when(unclaimed.isClaimable()).thenReturn(true); NodeManager.nodes.addAll(List.of(claimed, unclaimed));

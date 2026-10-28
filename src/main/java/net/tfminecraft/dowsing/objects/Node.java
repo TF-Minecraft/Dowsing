@@ -403,6 +403,7 @@ public class Node {
 			p.closeInventory();
 		}
 		guild = null;
+		NodeManager.released(g, this);
 		NodeManager.requestNodeBenefitSync();
 	}
 
