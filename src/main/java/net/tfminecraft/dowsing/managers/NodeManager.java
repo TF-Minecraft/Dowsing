@@ -5,6 +5,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 
 import org.apache.commons.lang.WordUtils;
 import org.bukkit.Bukkit;
@@ -116,6 +117,7 @@ public class NodeManager implements Listener{
 	public static Integer getNodeAmount(Guild g) {
 		Integer i = 0;
 		if(g == null) return i;
+		if(passCounts != null) return g.getId() == null ? i : passCounts.getOrDefault(g.getId(), i);
 		for(Node n : nodes) {
 			if(!n.hasGuild()) continue;
 			if(n.getBlock().isSpecial()) continue;
@@ -123,6 +125,34 @@ public class NodeManager implements Listener{
 		}
 		return i;
 	}
+	/**
+	 * Claimed-node counts per guild for one particle pass. The pass checks every claimed node four
+	 * times a second, and each check counted its guild's nodes by walking every node, so a pass cost
+	 * nodes x nodes guild lookups. Counted once per pass instead, and kept right by {@link #released}.
+	 */
+	private static Map<String, Integer> passCounts;
+
+	static void beginCountPass() {
+		Map<String, Integer> counts = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+		for(Node n : nodes) {
+			if(!n.hasGuild()) continue;
+			if(n.getBlock().isSpecial()) continue;
+			String id = n.getGuild().getId();
+			if(id != null) counts.merge(id, 1, Integer::sum);
+		}
+		passCounts = counts;
+	}
+
+	static void endCountPass() {
+		passCounts = null;
+	}
+
+	/** A node of {@code g} was just let go during a particle pass, so its guild holds one fewer. */
+	public static void released(Guild g, Node n) {
+		if(passCounts == null || g == null || g.getId() == null || n.getBlock().isSpecial()) return;
+		passCounts.computeIfPresent(g.getId(), (id, count) -> count - 1);
+	}
+
 	public static Integer getNodeCapacity(Guild g) {
 		int capacity = 1;
 		if(g == null) return capacity;
@@ -211,14 +241,19 @@ public class NodeManager implements Listener{
 			public void run()
 			{
 				if (!DowsingMain.plugin.nodesReady()) return;
-				for(Node n : nodes){
-					if(n.isClaimable()){
-						Location loc = n.getLoc().clone().add(0.5, 1, 0.5);
-						loc.getWorld().spawnParticle(Particle.HAPPY_VILLAGER, loc, 10);
-					} else {
-						n.check();
+				beginCountPass();
+				try {
+					for(Node n : nodes){
+						if(n.isClaimable()){
+							Location loc = n.getLoc().clone().add(0.5, 1, 0.5);
+							loc.getWorld().spawnParticle(Particle.HAPPY_VILLAGER, loc, 10);
+						} else {
+							n.check();
+						}
 					}
-				}	
+				} finally {
+					endCountPass();
+				}
 			}
 		}.runTaskTimer(DowsingMain.plugin, 0L, 5L);
 	}
