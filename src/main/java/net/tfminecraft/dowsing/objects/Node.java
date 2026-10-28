@@ -8,6 +8,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.IntSupplier;
 
 import org.apache.commons.lang.WordUtils;
 import org.bukkit.Bukkit;
@@ -84,11 +85,13 @@ public class Node {
 		return dailyUpkeep(currentCostIncrease());
 	}
 	/**
-	 * {@link #getDailyUpkeep()} for a node whose guild is already known to hold {@code nodeAmount}
-	 * nodes, so a guild total counts its nodes once instead of once per node.
+	 * {@link #getDailyUpkeep()} with the guild's node count supplied by the caller, so a guild
+	 * total counts its nodes once instead of once per node. The count is only asked for when this
+	 * node's guild resolves, exactly when {@link #currentCostIncrease()} would count.
 	 */
-	public double getDailyUpkeep(int nodeAmount) {
-		return dailyUpkeep(costIncreaseFor(nodeAmount, getCapacity()));
+	public double getDailyUpkeep(IntSupplier nodeAmount) {
+		if(resolveGuild() == null) return getDailyUpkeep();
+		return dailyUpkeep(costIncreaseFor(nodeAmount.getAsInt(), getCapacity()));
 	}
 	private double dailyUpkeep(double costIncrease) {
 		double base = upkeep == null ? 0.0 : upkeep;

@@ -75,7 +75,7 @@ class NodeManagerCyclesTest {
         assertEquals(0, NodeManager.getExtraCapacity(null)); assertFalse(NodeManager.canPurchaseCapacity(null));
         assertEquals(0, NodeManager.getTotalUpkeep(null)); assertEquals(0, NodeManager.getNodeAmount(null));
         assertEquals(1, NodeManager.getNodeCapacity(null)); assertEquals(1, NodeManager.getNodeCapacity(f.guild));
-        NodeManager.nodes.add(f.node); when(f.node.getIsActive()).thenReturn(true); when(f.node.getDailyUpkeep(anyInt())).thenReturn(2.25);
+        NodeManager.nodes.add(f.node); when(f.node.getIsActive()).thenReturn(true); when(f.node.getDailyUpkeep(any(java.util.function.IntSupplier.class))).thenReturn(2.25);
         Node inactive = f.nodeAt(f.location), unowned = f.nodeAt(f.location), other = f.nodeAt(f.location);
         when(unowned.hasGuild()).thenReturn(false); when(unowned.getIsActive()).thenReturn(true);
         Guild otherGuild = mock(Guild.class); when(otherGuild.getId()).thenReturn("other"); when(other.getGuild()).thenReturn(otherGuild); when(other.getIsActive()).thenReturn(true);
