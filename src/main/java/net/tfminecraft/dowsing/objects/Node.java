@@ -81,9 +81,19 @@ public class Node {
 	 * since members joining or capacity being bought does not refresh every node.
 	 */
 	public double getDailyUpkeep() {
+		return dailyUpkeep(currentCostIncrease());
+	}
+	/**
+	 * {@link #getDailyUpkeep()} for a node whose guild is already known to hold {@code nodeAmount}
+	 * nodes, so a guild total counts its nodes once instead of once per node.
+	 */
+	public double getDailyUpkeep(int nodeAmount) {
+		return dailyUpkeep(costIncreaseFor(nodeAmount, getCapacity()));
+	}
+	private double dailyUpkeep(double costIncrease) {
 		double base = upkeep == null ? 0.0 : upkeep;
 		return BigDecimal.valueOf(base)
-				.multiply(BigDecimal.valueOf(currentCostIncrease()))
+				.multiply(BigDecimal.valueOf(costIncrease))
 				.setScale(2, RoundingMode.HALF_UP)
 				.doubleValue();
 	}
