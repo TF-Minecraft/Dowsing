@@ -71,6 +71,66 @@ class NodeManagerCyclesTest {
     }
 
     @Test
+    void syncDropsANodeValueLeftOnAGuildThatIsNoLongerItsRealmsOwn() {
+        Guild formerRealm = mock(Guild.class), ordinary = mock(Guild.class), realm = mock(Guild.class);
+        List<Modifier> stale = new ArrayList<>(List.of(new Modifier("Bank", 5.0, false), new Modifier("Nodes", 40.0, true)));
+        when(formerRealm.getWealthModifiers()).thenReturn(stale);
+        when(ordinary.getWealthModifiers()).thenReturn(new ArrayList<>(List.of(new Modifier("Bank", 1.0, false))));
+        Faction owner = mock(Faction.class); when(owner.getOrCreateMainGuild()).thenReturn(realm);
+        f.factions.when(FactionManager::getCopy).thenReturn(new ArrayList<>(List.of(owner)));
+        // Only the guild a realm names as its own keeps a value, whatever its type says.
+        when(formerRealm.isBase()).thenReturn(true);
+        f.factions.when(FactionManager::getAllGuilds).thenReturn(new ArrayList<>(java.util.Arrays.asList(formerRealm, ordinary, realm, null)));
+        NodeManager.syncFactionNodeBenefits();
+        assertEquals(List.of("Bank"), stale.stream().map(Modifier::getType).toList());
+        verify(formerRealm).updateWealth();
+        verify(ordinary, never()).updateWealth();
+        verify(realm, never()).getWealthModifiers(); verify(realm).updateWealth();
+    }
+
+    @Test
+    void theMinuteCheckResyncsOnlyWhenANodesGuildOrRealmChanged() {
+        Faction first = mock(Faction.class), second = mock(Faction.class);
+        Guild firstMain = mock(Guild.class), secondMain = mock(Guild.class);
+        when(first.getOrCreateMainGuild()).thenReturn(firstMain); when(second.getOrCreateMainGuild()).thenReturn(secondMain);
+        f.factions.when(FactionManager::getCopy).thenReturn(new ArrayList<>(List.of(first, second)));
+        when(f.guild.getFaction()).thenReturn(first);
+        when(f.node.getIsActive()).thenReturn(true); when(f.node.getWealthModifier()).thenReturn(10.0);
+        Node idle = f.nodeAt(f.location);
+        NodeManager.nodes.addAll(List.of(f.node, idle));
+        NodeManager.syncFactionNodeBenefits();
+        verify(first, times(1)).updatePrestige();
+        NodeManager.syncIfRealmsChanged();
+        verify(first, times(1)).updatePrestige();
+        // The guild's realm dissolved into another one: the node's value has to follow it.
+        when(f.guild.getFaction()).thenReturn(second);
+        NodeManager.syncIfRealmsChanged();
+        verify(first, times(2)).updatePrestige();
+        ArgumentCaptor<Modifier> modifier = ArgumentCaptor.forClass(Modifier.class);
+        verify(secondMain, times(2)).addWealthModifier(modifier.capture());
+        assertEquals(10.0, modifier.getValue().getAmount());
+        NodeManager.syncIfRealmsChanged();
+        verify(first, times(2)).updatePrestige();
+        Guild other = mock(Guild.class); when(other.getFaction()).thenReturn(second);
+        when(f.node.getGuild()).thenReturn(other);
+        NodeManager.syncIfRealmsChanged();
+        verify(first, times(3)).updatePrestige();
+        when(f.node.getGuild()).thenReturn(null);
+        NodeManager.syncIfRealmsChanged();
+        verify(first, times(4)).updatePrestige();
+        NodeManager.nodes.remove(idle);
+        NodeManager.syncIfRealmsChanged();
+        verify(first, times(4)).updatePrestige();
+        NodeManager.nodes.clear();
+        NodeManager.syncIfRealmsChanged();
+        verify(first, times(5)).updatePrestige();
+        net.tfminecraft.dowsing.testsupport.FactionFixture.api.when(net.tfminecraft.simplefactions.api.SimpleFactionsApi::ready).thenReturn(false);
+        NodeManager.nodes.add(f.node);
+        NodeManager.syncIfRealmsChanged();
+        verify(first, times(5)).updatePrestige();
+    }
+
+    @Test
     void countsCapacityAndUpkeepRespectOwnershipSpecialNodesAndPurchasedLimits() {
         assertEquals(0, NodeManager.getExtraCapacity(null)); assertFalse(NodeManager.canPurchaseCapacity(null));
         assertEquals(0, NodeManager.getTotalUpkeep(null)); assertEquals(0, NodeManager.getNodeAmount(null));
@@ -211,7 +271,7 @@ class NodeManagerCyclesTest {
         Node claimed = f.node, unclaimed = f.nodeAt(f.location);
         when(unclaimed.isClaimable()).thenReturn(true); NodeManager.nodes.addAll(List.of(claimed, unclaimed));
         try (Cycles cycles = new Cycles()) {
-            f.manager.start(); assertEquals(java.util.Set.of(5L, 1200L, 72000L), cycles.tasks.keySet());
+            f.manager.start(); assertEquals(java.util.Set.of(5L, 600L, 1200L, 72000L), cycles.tasks.keySet());
             cycles.tasks.get(5L).run(); verify(claimed).check();
             verify(f.world).spawnParticle(Particle.HAPPY_VILLAGER, new Location(f.world, 2.5, 65, 3.5), 10);
             cycles.tasks.get(72000L).run(); verify(claimed).growEfficiency(); verify(unclaimed).growEfficiency();
@@ -231,6 +291,53 @@ class NodeManagerCyclesTest {
             verify(f.chunk).setForceLoaded(true); verify(droppers.constructed().getFirst()).dropItems(node);
             assertEquals(29, node.getTimeLeft()); assertEquals(0, node.getCycleTime()); assertEquals(1, node.getInputCounter());
             verify(engines.constructed().getFirst()).takeInputs(node); assertTrue(node.getIsActive());
+        }
+    }
+
+    @Test
+    void aSyncThatFailsPartWayIsRetriedByTheRealmCheck() {
+        Faction realm = mock(Faction.class); Guild main = mock(Guild.class);
+        when(realm.getOrCreateMainGuild()).thenReturn(main);
+        when(f.guild.getFaction()).thenReturn(realm); when(f.node.getIsActive()).thenReturn(true);
+        NodeManager.nodes.add(f.node);
+        NodeManager.syncFactionNodeBenefits();
+        Faction moved = mock(Faction.class); when(f.guild.getFaction()).thenReturn(moved);
+        f.factions.when(FactionManager::getCopy).thenThrow(new IllegalStateException("half way"));
+        assertThrows(IllegalStateException.class, NodeManager::syncIfRealmsChanged);
+        f.factions.when(FactionManager::getCopy).thenReturn(new ArrayList<>(List.of(moved)));
+        Guild movedMain = mock(Guild.class); when(moved.getOrCreateMainGuild()).thenReturn(movedMain);
+        NodeManager.syncIfRealmsChanged();
+        verify(moved).updatePrestige();
+        NodeManager.syncIfRealmsChanged();
+        verify(moved, times(1)).updatePrestige();
+        // A node event's sync that fails with the same owners is retried too.
+        f.factions.when(FactionManager::getCopy).thenThrow(new IllegalStateException("again"));
+        assertThrows(IllegalStateException.class, NodeManager::requestNodeBenefitSync);
+        f.factions.when(FactionManager::getCopy).thenReturn(new ArrayList<>(List.of(moved)));
+        NodeManager.syncIfRealmsChanged();
+        verify(moved, times(2)).updatePrestige();
+        NodeManager.syncIfRealmsChanged();
+        verify(moved, times(2)).updatePrestige();
+    }
+
+    @Test
+    void theRealmCycleResyncsWhenReadyAndLogsAFailureInsteadOfStopping() {
+        Faction realm = mock(Faction.class); Guild main = mock(Guild.class);
+        when(realm.getOrCreateMainGuild()).thenReturn(main);
+        f.factions.when(FactionManager::getCopy).thenReturn(new ArrayList<>(List.of(realm)));
+        when(f.guild.getFaction()).thenReturn(realm); when(f.node.getIsActive()).thenReturn(true);
+        NodeManager.nodes.add(f.node);
+        try (Cycles cycles = new Cycles()) {
+            f.manager.start();
+            when(DowsingMain.plugin.nodesReady()).thenReturn(false);
+            cycles.tasks.get(600L).run();
+            verify(realm, never()).updatePrestige();
+            when(DowsingMain.plugin.nodesReady()).thenReturn(true);
+            cycles.tasks.get(600L).run();
+            verify(realm).updatePrestige();
+            when(f.node.getIsActive()).thenThrow(new IllegalStateException("broken node"));
+            cycles.tasks.get(600L).run();
+            verify(f.logger).log(eq(java.util.logging.Level.SEVERE), eq("Failed to check node realms"), any(IllegalStateException.class));
         }
     }
 
