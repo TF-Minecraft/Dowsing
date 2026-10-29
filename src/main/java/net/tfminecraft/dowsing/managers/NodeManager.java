@@ -74,15 +74,17 @@ public class NodeManager implements Listener{
 
 	/** Each active node's guild and that guild's realm at the last sync, to spot realm changes. */
 	private static List<Object> lastOwners = List.of();
+	/** Whether the last sync finished; a failed one is retried even if no owner changed. */
+	private static boolean synced = false;
 
 	/**
 	 * Node benefits sit on each realm's own guild and only node events resync them. A dissolve,
 	 * elevation or relocation moves a node to another realm without one, so {@link #realmCycle}
-	 * resyncs when any active node's guild or realm changed since the last sync.
+	 * resyncs when any active node's guild or realm changed since the last sync, or that sync failed.
 	 */
 	public static void syncIfRealmsChanged() {
 		if (!SimpleFactionsApi.ready()) return;
-		if (!sameOwners(owners(), lastOwners)) syncFactionNodeBenefits();
+		if (!synced || !sameOwners(owners(), lastOwners)) syncFactionNodeBenefits();
 	}
 
 	private static List<Object> owners() {
@@ -107,6 +109,7 @@ public class NodeManager implements Listener{
 
 	public static void syncFactionNodeBenefits() {
 		if (!SimpleFactionsApi.ready()) return;
+		synced = false;
 		List<Object> owners = owners();
 		Map<Faction, Double> prestigeByFaction = new HashMap<>();
 		Map<Faction, Double> wealthByFaction = new HashMap<>();
@@ -138,6 +141,7 @@ public class NodeManager implements Listener{
 		}
 		// Only a finished sync counts, so the realm check retries one that failed part way.
 		lastOwners = owners;
+		synced = true;
 	}
 
 	public static int getExtraCapacity(Guild g) {

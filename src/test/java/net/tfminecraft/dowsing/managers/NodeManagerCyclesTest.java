@@ -310,6 +310,14 @@ class NodeManagerCyclesTest {
         verify(moved).updatePrestige();
         NodeManager.syncIfRealmsChanged();
         verify(moved, times(1)).updatePrestige();
+        // A node event's sync that fails with the same owners is retried too.
+        f.factions.when(FactionManager::getCopy).thenThrow(new IllegalStateException("again"));
+        assertThrows(IllegalStateException.class, NodeManager::requestNodeBenefitSync);
+        f.factions.when(FactionManager::getCopy).thenReturn(new ArrayList<>(List.of(moved)));
+        NodeManager.syncIfRealmsChanged();
+        verify(moved, times(2)).updatePrestige();
+        NodeManager.syncIfRealmsChanged();
+        verify(moved, times(2)).updatePrestige();
     }
 
     @Test
