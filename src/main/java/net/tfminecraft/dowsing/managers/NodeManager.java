@@ -77,7 +77,7 @@ public class NodeManager implements Listener{
 
 	/**
 	 * Node benefits sit on each realm's own guild and only node events resync them. A dissolve,
-	 * elevation or relocation moves a node to another realm without one, so the minute cycle
+	 * elevation or relocation moves a node to another realm without one, so {@link #realmCycle}
 	 * resyncs when any active node's guild or realm changed since the last sync.
 	 */
 	public static void syncIfRealmsChanged() {
