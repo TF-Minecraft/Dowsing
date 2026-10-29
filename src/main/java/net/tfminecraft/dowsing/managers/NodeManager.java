@@ -69,8 +69,42 @@ public class NodeManager implements Listener{
 		syncFactionNodeBenefits();
 	}
 
+	/** Each active node's guild and that guild's realm at the last sync, to spot realm changes. */
+	private static List<Object> lastOwners = List.of();
+
+	/**
+	 * Node benefits sit on each realm's own guild and only node events resync them. A dissolve,
+	 * elevation or relocation moves a node to another realm without one, so the minute cycle
+	 * resyncs when any active node's guild or realm changed since the last sync.
+	 */
+	public static void syncIfRealmsChanged() {
+		if (!SimpleFactionsApi.ready()) return;
+		if (!sameOwners(owners(), lastOwners)) syncFactionNodeBenefits();
+	}
+
+	private static List<Object> owners() {
+		List<Object> owners = new ArrayList<>();
+		for(Node n : nodes) {
+			if(!n.hasGuild() || !Boolean.TRUE.equals(n.getIsActive())) continue;
+			Guild g = n.getGuild();
+			owners.add(n);
+			owners.add(g);
+			owners.add(g == null ? null : g.getFaction());
+		}
+		return owners;
+	}
+
+	private static boolean sameOwners(List<Object> now, List<Object> before) {
+		if (now.size() != before.size()) return false;
+		for (int i = 0; i < now.size(); i++) {
+			if (now.get(i) != before.get(i)) return false;
+		}
+		return true;
+	}
+
 	public static void syncFactionNodeBenefits() {
 		if (!SimpleFactionsApi.ready()) return;
+		lastOwners = owners();
 		Map<Faction, Double> prestigeByFaction = new HashMap<>();
 		Map<Faction, Double> wealthByFaction = new HashMap<>();
 		for(Node n : nodes) {
@@ -90,6 +124,12 @@ public class NodeManager implements Listener{
 			Guild mainGuild = f.getOrCreateMainGuild();
 			mainGuild.addWealthModifier(new Modifier("Nodes", wealth, true));
 			mainGuild.updateWealth();
+		}
+		// A realm's own guild that became an ordinary guild (its realm dissolved into an overlord)
+		// kept its last node value; only realm guilds carry one.
+		for(Guild g : FactionManager.getAllGuilds()) {
+			if(g == null || g.isBase()) continue;
+			if(g.getWealthModifiers().removeIf(m -> "Nodes".equalsIgnoreCase(m.getType()))) g.updateWealth();
 		}
 	}
 
@@ -191,6 +231,7 @@ public class NodeManager implements Listener{
 	public void start() {
 		particleCycle();
 		hourCycle();
+		realmCycle();
 		new BukkitRunnable()
 		{
 			public void run()
@@ -238,6 +279,21 @@ public class NodeManager implements Listener{
 					}	
 			   }
 		}.runTaskTimer(DowsingMain.plugin, 0L, 1200L);
+	}
+	/** Every 30 s: resync node benefits when a node's guild or realm changed without a node event. */
+	public void realmCycle(){
+		new BukkitRunnable()
+		{
+			public void run()
+			{
+				if (!DowsingMain.plugin.nodesReady()) return;
+				try {
+					syncIfRealmsChanged();
+				} catch(RuntimeException ex) {
+					DowsingMain.plugin.getLogger().log(java.util.logging.Level.SEVERE, "Failed to check node realms", ex);
+				}
+			}
+		}.runTaskTimer(DowsingMain.plugin, 0L, 600L);
 	}
 	public void particleCycle(){
 		new BukkitRunnable()
