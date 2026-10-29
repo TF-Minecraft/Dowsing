@@ -2,9 +2,12 @@ package net.tfminecraft.dowsing.managers;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 
 import org.apache.commons.lang.WordUtils;
@@ -116,6 +119,7 @@ public class NodeManager implements Listener{
 			prestigeByFaction.merge(f, n.getPrestigeGain(), Double::sum);
 			wealthByFaction.merge(f, n.getWealthModifier(), Double::sum);
 		}
+		Set<Guild> realmGuilds = Collections.newSetFromMap(new IdentityHashMap<>());
 		for(Faction f : FactionManager.getCopy()) {
 			double prestige = prestigeByFaction.getOrDefault(f, 0.0);
 			double wealth = wealthByFaction.getOrDefault(f, 0.0);
@@ -124,11 +128,12 @@ public class NodeManager implements Listener{
 			Guild mainGuild = f.getOrCreateMainGuild();
 			mainGuild.addWealthModifier(new Modifier("Nodes", wealth, true));
 			mainGuild.updateWealth();
+			realmGuilds.add(mainGuild);
 		}
 		// A realm's own guild that became an ordinary guild (its realm dissolved into an overlord)
 		// kept its last node value; only realm guilds carry one.
 		for(Guild g : FactionManager.getAllGuilds()) {
-			if(g == null || g.isBase()) continue;
+			if(g == null || realmGuilds.contains(g)) continue;
 			if(g.getWealthModifiers().removeIf(m -> "Nodes".equalsIgnoreCase(m.getType()))) g.updateWealth();
 		}
 	}

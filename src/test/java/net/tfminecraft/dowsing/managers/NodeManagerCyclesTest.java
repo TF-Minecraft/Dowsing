@@ -76,13 +76,16 @@ class NodeManagerCyclesTest {
         List<Modifier> stale = new ArrayList<>(List.of(new Modifier("Bank", 5.0, false), new Modifier("Nodes", 40.0, true)));
         when(formerRealm.getWealthModifiers()).thenReturn(stale);
         when(ordinary.getWealthModifiers()).thenReturn(new ArrayList<>(List.of(new Modifier("Bank", 1.0, false))));
-        when(realm.isBase()).thenReturn(true);
+        Faction owner = mock(Faction.class); when(owner.getOrCreateMainGuild()).thenReturn(realm);
+        f.factions.when(FactionManager::getCopy).thenReturn(new ArrayList<>(List.of(owner)));
+        // Only the guild a realm names as its own keeps a value, whatever its type says.
+        when(formerRealm.isBase()).thenReturn(true);
         f.factions.when(FactionManager::getAllGuilds).thenReturn(new ArrayList<>(java.util.Arrays.asList(formerRealm, ordinary, realm, null)));
         NodeManager.syncFactionNodeBenefits();
         assertEquals(List.of("Bank"), stale.stream().map(Modifier::getType).toList());
         verify(formerRealm).updateWealth();
         verify(ordinary, never()).updateWealth();
-        verify(realm, never()).getWealthModifiers();
+        verify(realm, never()).getWealthModifiers(); verify(realm).updateWealth();
     }
 
     @Test
