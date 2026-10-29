@@ -107,7 +107,7 @@ public class NodeManager implements Listener{
 
 	public static void syncFactionNodeBenefits() {
 		if (!SimpleFactionsApi.ready()) return;
-		lastOwners = owners();
+		List<Object> owners = owners();
 		Map<Faction, Double> prestigeByFaction = new HashMap<>();
 		Map<Faction, Double> wealthByFaction = new HashMap<>();
 		for(Node n : nodes) {
@@ -136,6 +136,8 @@ public class NodeManager implements Listener{
 			if(g == null || realmGuilds.contains(g)) continue;
 			if(g.getWealthModifiers().removeIf(m -> "Nodes".equalsIgnoreCase(m.getType()))) g.updateWealth();
 		}
+		// Only a finished sync counts, so the realm check retries one that failed part way.
+		lastOwners = owners;
 	}
 
 	public static int getExtraCapacity(Guild g) {

@@ -295,6 +295,24 @@ class NodeManagerCyclesTest {
     }
 
     @Test
+    void aSyncThatFailsPartWayIsRetriedByTheRealmCheck() {
+        Faction realm = mock(Faction.class); Guild main = mock(Guild.class);
+        when(realm.getOrCreateMainGuild()).thenReturn(main);
+        when(f.guild.getFaction()).thenReturn(realm); when(f.node.getIsActive()).thenReturn(true);
+        NodeManager.nodes.add(f.node);
+        NodeManager.syncFactionNodeBenefits();
+        Faction moved = mock(Faction.class); when(f.guild.getFaction()).thenReturn(moved);
+        f.factions.when(FactionManager::getCopy).thenThrow(new IllegalStateException("half way"));
+        assertThrows(IllegalStateException.class, NodeManager::syncIfRealmsChanged);
+        f.factions.when(FactionManager::getCopy).thenReturn(new ArrayList<>(List.of(moved)));
+        Guild movedMain = mock(Guild.class); when(moved.getOrCreateMainGuild()).thenReturn(movedMain);
+        NodeManager.syncIfRealmsChanged();
+        verify(moved).updatePrestige();
+        NodeManager.syncIfRealmsChanged();
+        verify(moved, times(1)).updatePrestige();
+    }
+
+    @Test
     void theRealmCycleResyncsWhenReadyAndLogsAFailureInsteadOfStopping() {
         Faction realm = mock(Faction.class); Guild main = mock(Guild.class);
         when(realm.getOrCreateMainGuild()).thenReturn(main);
