@@ -208,11 +208,20 @@ public class NodeManager implements Listener{
 		passCounts.computeIfPresent(g.getId(), (id, count) -> count - 1);
 	}
 
+	/** Room for new nodes, from the guild's active members. */
 	public static Integer getNodeCapacity(Guild g) {
+		return capacityFor(g, net.tfminecraft.dowsing.utils.ActiveMembers.count(g));
+	}
+
+	/** Room to keep the nodes a guild already holds, from all its members, so going inactive does not cost a node. */
+	public static Integer getHeldNodeCapacity(Guild g) {
+		return capacityFor(g, g == null || g.getMembers() == null ? 0 : g.getMembers().size());
+	}
+
+	private static Integer capacityFor(Guild g, int members) {
 		int capacity = 1;
 		if(g == null) return capacity;
 		if(Cache.extraCapacity) {
-			int members = g.getMembers().size();
 			int added = (int) Math.floorDiv(members, Cache.membersPerCapacity);
 			if(added > Cache.maxMemberCapacity) {
 				added = Cache.maxMemberCapacity;
@@ -450,8 +459,8 @@ public class NodeManager implements Listener{
 			e.setCancelled(true);
 			return;
 		}
-		if(g.getMembers().size() < Cache.minMembersForNode && !b.isSpecial()){
-			p.sendMessage("§cYou need at least "+Cache.minMembersForNode+" members in your guild to have a node!");
+		if(net.tfminecraft.dowsing.utils.ActiveMembers.count(g) < Cache.minMembersForNode && !b.isSpecial()){
+			p.sendMessage("§cYou need at least "+Cache.minMembersForNode+" active members in your guild to have a node!");
 			e.setCancelled(true);
 			return;
 		}

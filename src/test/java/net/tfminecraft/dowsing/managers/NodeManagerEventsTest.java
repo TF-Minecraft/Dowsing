@@ -97,7 +97,7 @@ class NodeManagerEventsTest {
         verify(f.player).sendMessage(contains("need to have a guild"));
         f.factions.when(() -> FactionManager.getGuildByMember(f.player)).thenReturn(f.guild);
         Cache.minMembersForNode = 3; event = f.place(); f.manager.placeVanillaNode(event);
-        verify(event).setCancelled(true); verify(f.player).sendMessage(contains("at least 3 members"));
+        verify(event).setCancelled(true); verify(f.player).sendMessage(contains("at least 3 active members"));
         Cache.minMembersForNode = 1; NodeManager.nodes.add(f.nodeAt(f.remoteLocation()));
         event = f.place(); f.manager.placeVanillaNode(event); verify(event).setCancelled(true);
         verify(f.player).sendMessage(contains("filled its node capacity"));

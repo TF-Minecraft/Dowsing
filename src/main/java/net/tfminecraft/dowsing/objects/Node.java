@@ -307,8 +307,9 @@ public class Node {
 		if(held(g)) return true;
 		Player p = Members.player(g.getLeader());
 		if(p != null && p.isOnline() && Permissions.isAdmin(p)) return true;
+		// Holding counts every member, active or not; only new claims need active ones.
 		if(g.getMembers().size() < Cache.minMembersForNode) return false;
-		if(NodeManager.getNodeAmount(g)-NodeManager.getNodeCapacity(g) > 0) return false;
+		if(NodeManager.getNodeAmount(g)-NodeManager.getHeldNodeCapacity(g) > 0) return false;
 		return true;
 	}
 
@@ -328,8 +329,8 @@ public class Node {
 	public boolean canClaim(Player p, Guild g){
 		if(Permissions.isAdmin(p)) return true;
 		if(!isClaimable()) return false;
-		if(g.getMembers().size() < Cache.minMembersForNode){
-			p.sendMessage("§cYou need at least "+Cache.minMembersForNode+" members in your guild to claim this node!");
+		if(net.tfminecraft.dowsing.utils.ActiveMembers.count(g) < Cache.minMembersForNode){
+			p.sendMessage("§cYou need at least "+Cache.minMembersForNode+" active members in your guild to claim this node!");
 			return false;
 		}
 		if(NodeManager.getNodeAmount(g)-NodeManager.getNodeCapacity(g) >= 0 && !block.isSpecial()) {
@@ -584,14 +585,14 @@ public class Node {
 	public void growEfficiency() {
 		// A held realm has no members, which would cap its nodes' efficiency at 0 until it is taken on.
 		if(resolveGuild() == null || held(guild)) return;
-		int members = guild.getMembers().size();
+		int members = net.tfminecraft.dowsing.utils.ActiveMembers.count(guild);
 		double growth = Math.min(1.0, members*Cache.efficiencyGrowthPerMember);
 		updateEfficiency(growth);
 	}
 
 	public double getMaxEfficiency() {
 		if(resolveGuild() == null) return 0;
-		return Math.min(100.0, guild.getMembers().size()*Cache.maxEfficiencyPerMember);
+		return Math.min(100.0, net.tfminecraft.dowsing.utils.ActiveMembers.count(guild)*Cache.maxEfficiencyPerMember);
 	}
 
 	public void updateEfficiency(double eff) {
