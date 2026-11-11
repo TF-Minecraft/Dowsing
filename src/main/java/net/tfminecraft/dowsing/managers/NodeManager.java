@@ -162,8 +162,10 @@ public class NodeManager implements Listener{
 		int[] amount = {-1};
 		java.util.function.IntSupplier count = () -> amount[0] >= 0 ? amount[0] : (amount[0] = getNodeAmount(g));
 		for (Node n : nodes) {
-			if (!n.getIsActive() || !n.hasGuild()) continue;
-			if (!n.getGuild().getId().equalsIgnoreCase(g.getId())) continue;
+			if (!n.getIsActive()) continue;
+			// One lookup of the node's guild answers both whether it has one and which it is.
+			Guild owner = n.getGuild();
+			if (owner == null || !owner.getId().equalsIgnoreCase(g.getId())) continue;
 			total += n.getDailyUpkeep(count);
 		}
 		return total;
@@ -174,9 +176,10 @@ public class NodeManager implements Listener{
 		if(g == null) return i;
 		if(passCounts != null) return g.getId() == null ? i : passCounts.getOrDefault(g.getId(), i);
 		for(Node n : nodes) {
-			if(!n.hasGuild()) continue;
+			Guild owner = n.getGuild();
+			if(owner == null) continue;
 			if(n.getBlock().isSpecial()) continue;
-			if(n.getGuild().getId().equalsIgnoreCase(g.getId())) i++;
+			if(owner.getId().equalsIgnoreCase(g.getId())) i++;
 		}
 		return i;
 	}
@@ -186,26 +189,42 @@ public class NodeManager implements Listener{
 	 * nodes x nodes guild lookups. Counted once per pass instead, and kept right by {@link #released}.
 	 */
 	private static Map<String, Integer> passCounts;
+	/**
+	 * Whether each guild checked so far in one particle pass can hold its nodes. {@link Node#canHold}
+	 * asks only about the guild, so all its nodes get the same answer until one is let go; that
+	 * changes the count and resyncs realms, so {@link #released} forgets the answers.
+	 */
+	private static Map<Guild, Boolean> passHolds;
 
 	static void beginCountPass() {
 		Map<String, Integer> counts = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
 		for(Node n : nodes) {
-			if(!n.hasGuild()) continue;
+			Guild owner = n.getGuild();
+			if(owner == null) continue;
 			if(n.getBlock().isSpecial()) continue;
-			String id = n.getGuild().getId();
+			String id = owner.getId();
 			if(id != null) counts.merge(id, 1, Integer::sum);
 		}
 		passCounts = counts;
+		passHolds = new IdentityHashMap<>();
 	}
 
 	static void endCountPass() {
 		passCounts = null;
+		passHolds = null;
 	}
 
 	/** A node of {@code g} was just let go during a particle pass, so its guild holds one fewer. */
 	public static void released(Guild g, Node n) {
+		if(passHolds != null) passHolds.clear();
 		if(passCounts == null || g == null || g.getId() == null || n.getBlock().isSpecial()) return;
 		passCounts.computeIfPresent(g.getId(), (id, count) -> count - 1);
+	}
+
+	/** {@link Node#canHold} for a node's check: worked out once per guild during a particle pass. */
+	public static boolean canHold(Node n, Guild g) {
+		if(passHolds == null) return n.canHold(g);
+		return passHolds.computeIfAbsent(g, n::canHold);
 	}
 
 	/** Room for new nodes, from the guild's active members. */
@@ -324,11 +343,15 @@ public class NodeManager implements Listener{
 				beginCountPass();
 				try {
 					for(Node n : nodes){
-						if(n.isClaimable()){
+						if(!SimpleFactionsApi.ready()) continue;
+						// Looked up once here and handed to the check, not once to see if the
+						// node is claimable and twice more inside the check.
+						Guild g = n.getGuild();
+						if(g == null){
 							Location loc = n.getLoc().clone().add(0.5, 1, 0.5);
 							loc.getWorld().spawnParticle(Particle.HAPPY_VILLAGER, loc, 10);
 						} else {
-							n.check();
+							n.check(g);
 						}
 					}
 				} finally {
