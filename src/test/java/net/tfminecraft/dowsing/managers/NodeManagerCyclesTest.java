@@ -137,7 +137,7 @@ class NodeManagerCyclesTest {
         assertEquals(1, NodeManager.getNodeCapacity(null)); assertEquals(1, NodeManager.getNodeCapacity(f.guild));
         NodeManager.nodes.add(f.node); when(f.node.getIsActive()).thenReturn(true); when(f.node.getDailyUpkeep(any(java.util.function.IntSupplier.class))).thenReturn(2.25);
         Node inactive = f.nodeAt(f.location), unowned = f.nodeAt(f.location), other = f.nodeAt(f.location);
-        when(unowned.hasGuild()).thenReturn(false); when(unowned.getIsActive()).thenReturn(true);
+        when(unowned.getGuild()).thenReturn(null); when(unowned.getIsActive()).thenReturn(true);
         Guild otherGuild = mock(Guild.class); when(otherGuild.getId()).thenReturn("other"); when(other.getGuild()).thenReturn(otherGuild); when(other.getIsActive()).thenReturn(true);
         NodeManager.nodes.addAll(List.of(inactive, unowned, other));
         assertEquals(2, NodeManager.getNodeAmount(f.guild)); assertEquals(2.25, NodeManager.getTotalUpkeep(f.guild));
@@ -222,7 +222,7 @@ class NodeManagerCyclesTest {
     @Test
     void aParticlePassCountsEachGuildOnceAndTracksNodesLetGo() {
         Node second = f.nodeAt(f.location), unowned = f.nodeAt(f.location), other = f.nodeAt(f.location), special = f.nodeAt(f.location), noId = f.nodeAt(f.location);
-        when(unowned.hasGuild()).thenReturn(false);
+        when(unowned.getGuild()).thenReturn(null);
         Guild otherGuild = mock(Guild.class); when(otherGuild.getId()).thenReturn("OTHER"); when(other.getGuild()).thenReturn(otherGuild);
         NodeBlock specialBlock = mock(NodeBlock.class); when(specialBlock.isSpecial()).thenReturn(true); when(special.getBlock()).thenReturn(specialBlock);
         Guild idless = mock(Guild.class); when(noId.getGuild()).thenReturn(idless);
@@ -233,7 +233,7 @@ class NodeManagerCyclesTest {
         try {
             assertEquals(2, NodeManager.getNodeAmount(f.guild)); assertEquals(1, NodeManager.getNodeAmount(otherGuild));
             assertEquals(0, NodeManager.getNodeAmount(idless)); assertEquals(0, NodeManager.getNodeAmount(null));
-            when(f.node.hasGuild()).thenReturn(false);
+            when(f.node.getGuild()).thenReturn(null);
             assertEquals(2, NodeManager.getNodeAmount(f.guild), "counted once at the start of the pass");
             NodeManager.released(f.guild, f.node); assertEquals(1, NodeManager.getNodeAmount(f.guild));
             NodeManager.released(f.guild, special); NodeManager.released(null, f.node); NodeManager.released(idless, f.node);
@@ -267,14 +267,67 @@ class NodeManagerCyclesTest {
     }
 
     @Test
+    void aGuildsRightToItsNodesIsWorkedOutOncePerPassAndAgainAfterOneIsLetGo() {
+        Cache.extraCapacity = false; NodeManager.extraCapacityByGuild.put("guild", 1);
+        Node first = new Node(UUID.randomUUID(), f.block, f.location, f.guild, true, 1, 0, f.type, 60, 0, 25);
+        Node second = new Node(UUID.randomUUID(), f.block, f.location, f.guild, true, 1, 0, f.type, 60, 0, 25);
+        Node third = new Node(UUID.randomUUID(), f.block, f.location, f.guild, true, 1, 0, f.type, 60, 0, 25);
+        NodeManager.nodes.addAll(List.of(first, second));
+        clearInvocations(f.guild);
+        first.check(); second.check();
+        verify(f.guild, times(2)).isHeld();
+        NodeManager.beginCountPass();
+        try {
+            first.check(); second.check();
+            verify(f.guild, times(3)).isHeld();
+        } finally {
+            NodeManager.endCountPass();
+        }
+        NodeManager.nodes.add(third);
+        NodeManager.beginCountPass();
+        try {
+            first.check(); second.check(); third.check();
+            // Over capacity: the first node goes, then the guild is judged afresh, once for the other two.
+            verify(f.guild, times(5)).isHeld();
+            assertTrue(first.isClaimable()); assertFalse(second.isClaimable()); assertFalse(third.isClaimable());
+        } finally {
+            NodeManager.endCountPass();
+        }
+        second.check();
+        verify(f.guild, times(6)).isHeld();
+    }
+
+    @Test
+    void aParticlePassLooksUpEachNodesGuildOnceToCountAndOnceToCheck() {
+        Cache.extraCapacity = false; NodeManager.extraCapacityByGuild.put("guild", 1);
+        Node first = new Node(UUID.randomUUID(), f.block, f.location, f.guild, true, 1, 0, f.type, 60, 0, 25);
+        Node second = new Node(UUID.randomUUID(), f.block, f.location, f.guild, true, 1, 0, f.type, 60, 0, 25);
+        Node unclaimed = new Node(UUID.randomUUID(), f.block, f.location, null, false, 1, 0, f.type, 60, 0, 25);
+        NodeManager.nodes.addAll(List.of(first, second, unclaimed));
+        try (Cycles cycles = new Cycles()) {
+            f.manager.start();
+            f.factions.clearInvocations(); clearInvocations(f.guild);
+            cycles.tasks.get(5L).run();
+            f.factions.verify(() -> FactionManager.getGuildByString("guild"), times(4));
+            verify(f.guild, times(1)).isHeld();
+            verify(f.world, times(1)).spawnParticle(Particle.HAPPY_VILLAGER, new Location(f.world, 2.5, 65, 3.5), 10);
+            assertFalse(first.isClaimable()); assertFalse(second.isClaimable());
+        }
+    }
+
+    @Test
     void timersUseTheirIntendedCadenceAndRunParticlesChecksAndEfficiencyGrowth() {
         Node claimed = f.node, unclaimed = f.nodeAt(f.location);
-        when(unclaimed.isClaimable()).thenReturn(true); NodeManager.nodes.addAll(List.of(claimed, unclaimed));
+        when(unclaimed.getGuild()).thenReturn(null); NodeManager.nodes.addAll(List.of(claimed, unclaimed));
         try (Cycles cycles = new Cycles()) {
             f.manager.start(); assertEquals(java.util.Set.of(5L, 600L, 1200L, 72000L), cycles.tasks.keySet());
-            cycles.tasks.get(5L).run(); verify(claimed).check();
+            cycles.tasks.get(5L).run(); verify(claimed).check(f.guild); verify(unclaimed, never()).check(any());
             verify(f.world).spawnParticle(Particle.HAPPY_VILLAGER, new Location(f.world, 2.5, 65, 3.5), 10);
             cycles.tasks.get(72000L).run(); verify(claimed).growEfficiency(); verify(unclaimed).growEfficiency();
+            // While SimpleFactions is not ready a pass neither checks nodes nor marks them claimable.
+            net.tfminecraft.dowsing.testsupport.FactionFixture.api.when(net.tfminecraft.simplefactions.api.SimpleFactionsApi::ready).thenReturn(false);
+            cycles.tasks.get(5L).run(); verify(claimed, times(1)).check(f.guild);
+            verify(f.world, times(1)).spawnParticle(Particle.HAPPY_VILLAGER, new Location(f.world, 2.5, 65, 3.5), 10);
         }
     }
 

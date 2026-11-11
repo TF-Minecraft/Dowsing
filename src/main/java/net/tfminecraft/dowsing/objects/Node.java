@@ -305,12 +305,13 @@ public class Node {
 	public boolean canHold(Guild g){
 		if(g == null) return false;
 		if(held(g)) return true;
-		Player p = Members.player(g.getLeader());
-		if(p != null && p.isOnline() && Permissions.isAdmin(p)) return true;
 		// Holding counts every member, active or not; only new claims need active ones.
-		if(g.getMembers().size() < Cache.minMembersForNode) return false;
-		if(NodeManager.getNodeAmount(g)-NodeManager.getHeldNodeCapacity(g) > 0) return false;
-		return true;
+		if(g.getMembers().size() >= Cache.minMembersForNode
+				&& NodeManager.getNodeAmount(g)-NodeManager.getHeldNodeCapacity(g) <= 0) return true;
+		// Short of members or over capacity, only an online admin leader keeps the nodes. Asked last:
+		// it reads the leader's character, which a guild within its limits never needs.
+		Player p = Members.player(g.getLeader());
+		return p != null && p.isOnline() && Permissions.isAdmin(p);
 	}
 
 	/**
@@ -413,10 +414,16 @@ public class Node {
 
 	public void check() {
 		if (!SimpleFactionsApi.ready()) return;
-		if(isClaimable()) return;
-		Guild g = resolveGuild();
+		check(resolveGuild());
+	}
+
+	/**
+	 * {@link #check()} for a caller that has just resolved this node's guild, so the particle pass
+	 * looks each node's guild up once instead of three times. Null is an unclaimed node.
+	 */
+	public void check(Guild g) {
 		if(g == null) return;
-		if(canHold(g)) return;
+		if(NodeManager.canHold(this, g)) return;
 		Player p = Members.player(g.getLeader());
 		if(p != null && p.isOnline()) {
 			p.sendMessage("§cYou lost control of the "+block.getResource()+" Node §c!");

@@ -206,10 +206,20 @@ class NodeBehaviorTest {
     }
 
     @Test
-    void deletedOwnerDuringResolutionLeavesTheNodeClaimable() {
+    void aCheckLooksItsOwnerUpOnceAndADeletedOwnerLeavesTheNodeClaimable() {
         Node node = f.owned();
         f.factions.when(() -> FactionManager.getGuildByString("guild")).thenReturn(f.guild).thenReturn(null);
-        node.check(); assertTrue(node.isClaimable());
+        node.check(); assertSame(f.guild, node.guild, "one lookup per check");
+        node.check(); assertNull(node.guild); assertTrue(node.isClaimable());
+    }
+
+    @Test
+    void aGuildWithinItsLimitsKeepsItsNodesWithoutItsLeaderBeingLookedUp() {
+        Node node = f.owned();
+        clearInvocations(f.guild);
+        assertTrue(node.canHold(f.guild)); verify(f.guild, never()).getLeader();
+        Cache.minMembersForNode = 3;
+        assertFalse(node.canHold(f.guild)); verify(f.guild).getLeader();
     }
 
     @Test
