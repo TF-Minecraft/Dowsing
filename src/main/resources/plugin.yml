@@ -5,7 +5,7 @@ version: '${project.version}'
 author: Drefvelin
 
 depend: [TLibs, DenarEconomy, SimpleFactions, MMOItems, MythicLib, ItemsAdder]
-softdepend: [Magic]
+softdepend: [Magic, Cooking]
 
 commands:
   dowsing:
