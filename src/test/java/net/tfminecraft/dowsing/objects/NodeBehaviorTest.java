@@ -138,7 +138,7 @@ class NodeBehaviorTest {
         Cache.minMembersForNode = 3;
         assertFalse(node.canHold(null)); assertFalse(node.canHold(f.guild));
         assertFalse(node.canClaim(player, f.guild));
-        verify(player).sendMessage(contains("at least 3 members"));
+        verify(player).sendMessage(contains("at least 3 active members"));
         Cache.minMembersForNode = 1;
         assertTrue(node.canHold(f.guild)); assertTrue(node.canClaim(player, f.guild));
         Node owned = f.owned(); NodeManager.nodes.add(owned);
