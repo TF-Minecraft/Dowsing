@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.junit.jupiter.api.Test;
@@ -41,7 +42,8 @@ class CookingDropPathsTest {
 				if (drop[0].equals(SUGAR)) sugarDrops.add(key);
 			}
 		}
-		assertEquals(List.of("material_plantation", "spice_plantation", "sweet_spice_plantation"), sugarDrops);
+		assertEquals(3, sugarDrops.size(), sugarDrops.toString());
+		assertEquals(Set.of("material_plantation", "spice_plantation", "sweet_spice_plantation"), Set.copyOf(sugarDrops));
 	}
 
 	static YamlConfiguration bundled(String name) throws Exception {

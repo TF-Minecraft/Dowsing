@@ -34,6 +34,13 @@ public class ItemCreator {
 			return null;
 		}
 		try {
+			// TLibs turns a path type nobody registered into dirt, so a c. drop needs Cooking loaded.
+			if (s.regionMatches(true, 0, "c.", 0, 2) && TLibs.getItemAPI().getPathHandler("c") == null) {
+				if (loggedInvalidPaths.add(s)) {
+					Bukkit.getLogger().warning("[Dowsing] Item path needs Cooking, which is not loaded: " + s);
+				}
+				return null;
+			}
 			return TLibs.getItemAPI().getCreator().getItemFromPath(s);
 		} catch (RuntimeException e) {
 			if (loggedInvalidPaths.add(s)) {
