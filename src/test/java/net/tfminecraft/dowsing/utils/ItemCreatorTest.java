@@ -39,6 +39,7 @@ class ItemCreatorTest {
     final Map<Field, Object> previousCache = new HashMap<>();
     Set<String> warnings, previousWarnings;
     MockedStatic<TLibs> tlibs;
+    ItemAPI api;
     net.tfminecraft.tlibs.objects.api.subapi.ItemCreator provider;
     ItemCreator creator;
     Node node;
@@ -52,7 +53,7 @@ class ItemCreatorTest {
         Field field = ItemCreator.class.getDeclaredField("loggedInvalidPaths"); field.setAccessible(true);
         warnings = (Set<String>) field.get(null); previousWarnings = new HashSet<>(warnings); ItemCreator.clearInvalidPathWarnings();
         MockBukkit.mock(); Cache.efficiencyLossPM = 5; Cache.efficiencyLossType = 40;
-        tlibs = mockStatic(TLibs.class); ItemAPI api = mock(ItemAPI.class);
+        tlibs = mockStatic(TLibs.class); api = mock(ItemAPI.class);
         provider = mock(net.tfminecraft.tlibs.objects.api.subapi.ItemCreator.class);
         tlibs.when(TLibs::getItemAPI).thenReturn(api); when(api.getCreator()).thenReturn(provider);
         when(provider.getItemFromPath("v.STONE")).thenAnswer(inv -> new ItemStack(Material.STONE));
@@ -88,6 +89,30 @@ class ItemCreatorTest {
             assertEquals(List.of("[Dowsing] Invalid item path: bad (bad syntax)"), messages);
             ItemCreator.clearInvalidPathWarnings(); assertNull(creator.getItemFromPath("bad")); assertEquals(2, messages.size());
         } finally { Bukkit.getLogger().removeHandler(handler); }
+    }
+
+    @Test
+    void cookingPathsAreUnavailableUntilCookingRegistersItsHandler() {
+        // Without a c handler TLibs hands back dirt; the drop must count as unavailable instead.
+        String sugar = "c.sweetener(type=sweetener_1;origin=Sugar)";
+        when(provider.getItemFromPath(sugar)).thenAnswer(inv -> new ItemStack(Material.DIRT));
+        List<String> messages = new ArrayList<>(); Handler handler = new Handler() {
+            @Override public void publish(LogRecord record) { messages.add(record.getMessage()); }
+            @Override public void flush() {}
+            @Override public void close() {}
+        };
+        Bukkit.getLogger().addHandler(handler);
+        try {
+            assertNull(creator.getItemFromPath(sugar)); assertNull(creator.getItemFromPath("C.sweetener(type=sweetener_1;origin=Sugar)"));
+            assertNull(creator.getItemFromPath(sugar));
+            assertEquals(List.of("[Dowsing] Item path needs Cooking, which is not loaded: " + sugar,
+                    "[Dowsing] Item path needs Cooking, which is not loaded: C.sweetener(type=sweetener_1;origin=Sugar)"), messages);
+            verify(provider, never()).getItemFromPath(anyString());
+        } finally { Bukkit.getLogger().removeHandler(handler); }
+        when(api.getPathHandler("c")).thenReturn(mock(net.tfminecraft.tlibs.objects.api.subapi.ItemPathHandler.class));
+        when(provider.getItemFromPath(sugar)).thenAnswer(inv -> new ItemStack(Material.SUGAR));
+        assertEquals(Material.SUGAR, creator.getItemFromPath(sugar).getType());
+        assertEquals(Material.STONE, creator.getItemFromPath("v.STONE").getType());
     }
 
     @Test

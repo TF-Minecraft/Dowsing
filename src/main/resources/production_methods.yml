@@ -225,7 +225,7 @@ material_plantation:
         - time_modifier(-50)
         - upkeep(5)
         - add_drop(ia.iasurvival:tobacco,50)
-        - add_drop(v.sugar,50)
+        - add_drop(c.sweetener(type=sweetener_1;origin=Sugar),50)
 spice_plantation:
     weight: 1
     prerequisite: basic_farm_irrigation
@@ -236,7 +236,7 @@ spice_plantation:
         - yield(4)
         - prestige(4)
         - upkeep(10)
-        - add_drop(v.sugar,40)
+        - add_drop(c.sweetener(type=sweetener_1;origin=Sugar),40)
         - add_drop(ia.playbox_custom_crops:spiceleaf_seeds,20)
         - add_drop(ia.playbox_custom_crops:basil_seeds,20)
         - add_drop(ia.playbox_custom_crops:blackpepper_seeds,20)
@@ -250,7 +250,7 @@ sweet_spice_plantation:
         - yield(4)
         - prestige(4)
         - upkeep(10)
-        - add_drop(v.sugar,40)
+        - add_drop(c.sweetener(type=sweetener_1;origin=Sugar),40)
         - add_drop(ia.playbox_custom_crops:vanilla_seeds,20)
         - add_drop(ia.playbox_custom_crops:cinnamon_seeds,20)
         - add_drop(ia.playbox_custom_crops:nut_seeds,20)

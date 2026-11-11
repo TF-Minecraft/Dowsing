@@ -23,6 +23,22 @@ nodes that turn inputs, upgrades, and production choices into server resources.
 
 Originally created by [Drefvelin](https://github.com/Drefvelin).
 
+## Upgrading
+
+Dowsing writes its YAML files only when they are missing, so a new jar never changes an
+existing server's `production_methods.yml`. Apply default changes listed in the release
+notes by hand, then run `dowsing reload` or restart.
+
+- **Cooking foods from nodes:** any node drop listed in Cooking's `conversions.yml` must use
+  the Cooking food path from that list (prefixed `c.`), not the plain item. Cooking converts
+  plain items only when a player picks them up off the ground, and node output that goes
+  into the hopper above the node is never picked up. For example, replace
+  `add_drop(v.sugar,N)` with `add_drop(c.sweetener(type=sweetener_1;origin=Sugar),N)` and
+  `add_drop(ia.tfmc_cooking:salt,N)` with `add_drop(c.salt(type=seasoning_1;origin=Salt),N)`,
+  keeping each weight `N`. Each cycle rolls one quality for its food, and different qualities
+  don't stack, so a hopper that doesn't drain into a chest fills sooner. Cooking must be
+  loaded: without it a `c.` drop counts as unavailable and the node holds its cycle.
+
 ## Documentation
 
 [Project documentation](https://github.com/TF-Minecraft/Docs/blob/main/projects/Dowsing/README.md)
