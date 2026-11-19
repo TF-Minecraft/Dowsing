@@ -298,6 +298,22 @@ class NodeManagerCyclesTest {
     }
 
     @Test
+    void aFirstPassWithAnUnreadableLocationLetsNothingGoAndCleansUpLater() {
+        Node producing = f.nodeAt(f.location), idle = f.nodeAt(f.location);
+        when(producing.getIsActive()).thenReturn(true);
+        when(producing.getLoc()).thenThrow(new IllegalStateException("no location"));
+        NodeManager.nodes.addAll(List.of(producing, idle));
+        when(f.world.isChunkForceLoaded(0, 0)).thenReturn(true);
+        // The idle node shares the chunk of the node whose location cannot be read: not let go.
+        NodeManager.holdNodeChunks();
+        verify(f.world, never()).setChunkForceLoaded(0, 0, false);
+        // The first-pass clean-up still runs once every location reads.
+        doReturn(f.location).when(producing).getLoc(); when(producing.getIsActive()).thenReturn(false);
+        NodeManager.holdNodeChunks();
+        verify(f.world).setChunkForceLoaded(0, 0, false);
+    }
+
+    @Test
     void aNodeThatFailsValidationDoesNotStopTheOthers() {
         Node lost = f.nodeAt(f.location), invalid = f.nodeAt(f.location);
         when(lost.getLoc()).thenThrow(new IllegalStateException("no location"));

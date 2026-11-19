@@ -383,10 +383,12 @@ public class NodeManager implements Listener{
 		idle.removeAll(unknown);
 		Set<NodeChunk> next = new HashSet<>();
 		if(lookupFailed) {
-			// A node whose chunk is unknown may be in any held chunk: none is let go this pass.
-			for(NodeChunk chunk : heldChunks) {
-				if(idle.remove(chunk)) next.add(chunk);
+			// A node whose chunk is unknown may be in any of them: nothing is let go this pass. Held
+			// chunks stay tracked, and the first pass's clean-up waits for a pass that knows every chunk.
+			for(NodeChunk chunk : idle) {
+				if(heldChunks.contains(chunk)) next.add(chunk);
 			}
+			idle.clear();
 		}
 		// On the first pass a chunk that could not be handled is tracked anyway, so a later pass can still
 		// let go of a flag an earlier start left on it.
@@ -404,7 +406,7 @@ public class NodeManager implements Listener{
 		}
 		heldChunks.clear();
 		heldChunks.addAll(next);
-		startCleared = true;
+		if(!lookupFailed) startCleared = true;
 	}
 
 	private static void logChunkFailure(String message, RuntimeException ex) {
