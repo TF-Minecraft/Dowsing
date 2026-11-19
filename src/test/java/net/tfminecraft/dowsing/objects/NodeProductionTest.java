@@ -211,6 +211,19 @@ class NodeProductionTest {
     }
 
     @Test
+    void breakingANodeStillReturnsItsItemWhenLettingGoOfItsChunkFails() {
+        Node node = f.node();
+        Node neighbour = mock(Node.class); when(neighbour.getLoc()).thenReturn(f.location);
+        when(neighbour.getIsActive()).thenThrow(new IllegalStateException("guild lookup failed"));
+        net.tfminecraft.dowsing.managers.NodeManager.nodes.add(neighbour);
+        try (var droppers = mockConstruction(ItemDropper.class)) {
+            assertDoesNotThrow(node::breakNode);
+            verify(f.worldBlock).setType(Material.AIR);
+            verify(droppers.constructed().getFirst()).dropItem(new Location(f.world, 2.5, 64, 3.5), "v.IRON_BLOCK", false);
+        }
+    }
+
+    @Test
     void breakingANodeReturnsItsHeldOutputItemsOnlyOnce() {
         Node node = f.node(); node.setPendingResult(Map.of("v.STONE", 2));
         try (var droppers = mockConstruction(ItemDropper.class)) {

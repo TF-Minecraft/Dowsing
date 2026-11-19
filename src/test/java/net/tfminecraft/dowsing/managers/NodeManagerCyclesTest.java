@@ -241,9 +241,47 @@ class NodeManagerCyclesTest {
         when(f.world.isChunkForceLoaded(0, 0)).thenThrow(new IllegalStateException("world gone"));
         try (Cycles cycles = new Cycles()) {
             f.manager.start(); cycles.tasks.get(1200L).run();
-            verify(f.logger).log(eq(java.util.logging.Level.SEVERE), contains("Failed to update node chunk loading"), any(IllegalStateException.class));
+            verify(f.logger).log(eq(java.util.logging.Level.SEVERE), contains("Failed to hold node chunk 0, 0"), any(IllegalStateException.class));
             verify(node).tick();
         }
+    }
+
+    @Test
+    void aFailureOutsideOneChunkIsLoggedAndThePassGoesOn() {
+        Node node = f.node; when(node.hasGuild()).thenThrow(new IllegalStateException("guild lookup failed"));
+        when(node.getIsActive()).thenReturn(true); NodeManager.nodes.add(node);
+        try (Cycles cycles = new Cycles()) {
+            f.manager.start(); cycles.tasks.get(1200L).run();
+            verify(f.logger).log(eq(java.util.logging.Level.SEVERE), contains("Failed to update node chunk loading"), any(IllegalStateException.class));
+            verify(f.logger).log(eq(java.util.logging.Level.SEVERE), contains("Failed to process node"), any(IllegalStateException.class));
+        }
+    }
+
+    @Test
+    void aChunkThatFailsIsRetriedAndDoesNotStopTheOthers() {
+        Node first = f.nodeAt(f.location), second = f.nodeAt(new Location(f.world, 40, 64, -20));
+        when(first.getIsActive()).thenReturn(true); when(second.getIsActive()).thenReturn(true);
+        NodeManager.nodes.addAll(List.of(first, second));
+        when(f.world.isChunkForceLoaded(0, 0)).thenThrow(new IllegalStateException("bad chunk"));
+        NodeManager.holdNodeChunks(); NodeManager.holdNodeChunks();
+        verify(f.world, atLeastOnce()).setChunkForceLoaded(2, -2, true);
+        verify(f.world, times(2)).isChunkForceLoaded(0, 0);
+        // A chunk that cannot be let go stays known and is tried again.
+        clearInvocations(f.world);
+        when(f.world.isChunkForceLoaded(2, -2)).thenThrow(new IllegalStateException("bad chunk"));
+        when(second.getIsActive()).thenReturn(false);
+        NodeManager.holdNodeChunks(); NodeManager.holdNodeChunks();
+        verify(f.world, times(2)).isChunkForceLoaded(2, -2);
+        verify(f.logger, atLeastOnce()).log(eq(java.util.logging.Level.SEVERE), contains("Failed to let go of node chunk 2, -2"), any(IllegalStateException.class));
+    }
+
+    @Test
+    void aBrokenIdleNodeLeavesAStaffForceLoadAloneAfterTheFirstPass() {
+        Node idle = f.nodeAt(new Location(f.world, 40, 64, -20)); NodeManager.nodes.add(idle);
+        NodeManager.holdNodeChunks();
+        when(f.world.isChunkForceLoaded(2, -2)).thenReturn(true);
+        NodeManager.releaseChunkOf(idle);
+        verify(f.world, never()).setChunkForceLoaded(2, -2, false);
     }
 
     @Test

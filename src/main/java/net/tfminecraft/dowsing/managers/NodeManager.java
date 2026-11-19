@@ -353,8 +353,9 @@ public class NodeManager implements Listener{
 	 * and keeps every chunk a player loads within 13 chunks of it in memory, so an idle node's chunk must
 	 * not stay forced. The force flag (not a plugin ticket) is kept on purpose: like before, it keeps the
 	 * world ticking hoppers while nobody is online. It is saved with the world, so the first pass of each
-	 * start lets go of every idle node's chunk, including those Dowsing 3.4 and older never let go; later
-	 * passes only touch chunks this start forced. Waits for SimpleFactions, which says who owns a node.
+	 * start lets go of the chunk of every idle node Dowsing loaded, including those Dowsing 3.4 and older
+	 * never let go; spots of nodes removed before this version are not known and need a manual check.
+	 * Later passes only touch chunks this start forced. Waits for SimpleFactions, which says who owns a node.
 	 */
 	static void holdNodeChunks() {
 		if(!SimpleFactionsApi.ready()) return;
@@ -367,15 +368,30 @@ public class NodeManager implements Listener{
 			else if(!startCleared) idle.add(chunk);
 		}
 		idle.removeAll(wanted);
+		Set<NodeChunk> failed = new HashSet<>();
 		for(NodeChunk chunk : wanted) {
-			if(!chunk.forced()) chunk.force(true);
+			if(!setForced(chunk, true)) failed.add(chunk);
 		}
 		for(NodeChunk chunk : idle) {
-			if(chunk.forced()) chunk.force(false);
+			// Kept in the set when it could not be let go, so the next pass tries again.
+			if(!setForced(chunk, false)) wanted.add(chunk);
 		}
+		wanted.removeAll(failed);
 		heldChunks.clear();
 		heldChunks.addAll(wanted);
 		startCleared = true;
+	}
+
+	/** Sets one chunk's force flag; a failing chunk is logged and does not stop the others. */
+	private static boolean setForced(NodeChunk chunk, boolean on) {
+		try {
+			if(chunk.forced() != on) chunk.force(on);
+			return true;
+		} catch(RuntimeException ex) {
+			DowsingMain.plugin.getLogger().log(java.util.logging.Level.SEVERE,
+					"Failed to " + (on ? "hold" : "let go of") + " node chunk " + chunk.x() + ", " + chunk.z(), ex);
+			return false;
+		}
 	}
 
 	/**
@@ -388,8 +404,9 @@ public class NodeManager implements Listener{
 		for(Node n : nodes) {
 			if(n != removed && chunk.equals(NodeChunk.of(n)) && producing(n)) return;
 		}
-		heldChunks.remove(chunk);
-		if(chunk.forced()) chunk.force(false);
+		// Only a chunk Dowsing holds, or any node chunk before the first pass has cleared them; a staff
+		// force-load made later on an idle node's chunk is left alone.
+		if(heldChunks.remove(chunk) || !startCleared) setForced(chunk, false);
 	}
 
 	/** Forgets what this start held and cleared, for tests. */

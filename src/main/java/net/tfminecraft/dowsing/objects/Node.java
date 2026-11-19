@@ -24,6 +24,7 @@ import org.bukkit.entity.Player;
 
 import dev.lone.itemsadder.api.CustomFurniture;
 import net.tfminecraft.dowsing.Cache;
+import net.tfminecraft.dowsing.DowsingMain;
 import net.tfminecraft.dowsing.managers.NodeManager;
 import net.tfminecraft.dowsing.utils.Database;
 import net.tfminecraft.dowsing.utils.DropPaths;
@@ -759,7 +760,6 @@ public class Node {
 		// Stale menus can repeat removal; the node item and held output must drop only once.
 		if(this.broken) return;
 		this.broken = true;
-		NodeManager.releaseChunkOf(this);
 		String path = this.getBlock().getBlock();
 		String type = path.split("\\.")[0];
 		if(type.equalsIgnoreCase("v")) {
@@ -786,6 +786,12 @@ public class Node {
 		dropper.dropItem(loc, path, false);
 		loc.getWorld().playSound(loc, Sound.ENTITY_GLOW_ITEM_FRAME_REMOVE_ITEM, 0.5f, 1f);
 		NodeManager.requestNodeBenefitSync();
+		// Last, so a failure here cannot cost the node item or its held output.
+		try {
+			NodeManager.releaseChunkOf(this);
+		} catch(RuntimeException ex) {
+			DowsingMain.plugin.getLogger().log(java.util.logging.Level.SEVERE, "Failed to let go of node " + id + "'s chunk", ex);
+		}
 	}
 
 	private void removeNearbyFurniture() {
