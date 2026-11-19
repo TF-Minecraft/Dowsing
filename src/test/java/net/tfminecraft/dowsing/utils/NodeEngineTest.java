@@ -39,6 +39,7 @@ class NodeEngineTest {
     World world;
     Block below, above;
     Inventory inventory;
+    Barrel barrel;
     AtomicInteger inputs;
 
     @BeforeEach void setUp() {
@@ -49,7 +50,7 @@ class NodeEngineTest {
         when(node.getMultiplier()).thenReturn(2); inputs = new AtomicInteger(2);
         when(node.getInputCounter()).thenAnswer(inv -> inputs.get()); doAnswer(inv -> { inputs.set(inv.getArgument(0)); return null; }).when(node).setInputCounter(anyInt());
         when(world.getBlockAt(any(Location.class))).thenAnswer(inv -> ((Location) inv.getArgument(0)).getBlockY() == 63 ? below : above);
-        when(below.getType()).thenReturn(Material.BARREL); when(below.getState()).thenReturn(barrel); when(barrel.getInventory()).thenReturn(inventory);
+        when(below.getType()).thenReturn(Material.BARREL); when(below.getState()).thenReturn(barrel); when(barrel.getInventory()).thenReturn(inventory); when(barrel.getSnapshotInventory()).thenReturn(inventory); this.barrel = barrel;
         when(above.getType()).thenReturn(Material.HOPPER);
         tlibs = mockStatic(TLibs.class); ItemAPI api = mock(ItemAPI.class); ItemChecker checker = mock(ItemChecker.class);
         tlibs.when(TLibs::getItemAPI).thenReturn(api); when(api.getChecker()).thenReturn(checker);
@@ -89,6 +90,8 @@ class NodeEngineTest {
         inventory.setItem(2, new ItemStack(Material.COAL, 3)); inventory.setItem(3, new ItemStack(Material.DIAMOND, 4));
         engine.takeInputs(node);
         assertEquals(3, inputs.get()); assertEquals(3, count(Material.STONE)); assertEquals(1, count(Material.COAL)); assertEquals(4, count(Material.DIAMOND));
+        // Taken from the snapshot and written back, so the chunk is saved without the inputs.
+        verify(barrel).getSnapshotInventory(); verify(barrel).update(false, false);
         engine.take(node, "v.EMERALD", 1, inventory); assertEquals(4, count(Material.DIAMOND));
         engine.take(node, "v.STONE", 100, inventory); assertEquals(0, count(Material.STONE));
     }

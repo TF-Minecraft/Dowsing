@@ -127,7 +127,9 @@ public class NodeEngine {
 		l.add(0,-1,0);
 		Block block = l.getBlock();
 		Barrel b = (Barrel) block.getState();
-		Inventory i = b.getInventory();
+		// Taken from the snapshot and written back, which marks the chunk changed. Changing the live
+		// stacks did not, so the inputs were back in the barrel after the chunk unloaded or a restart.
+		Inventory i = b.getSnapshotInventory();
 		HashMap<String, Integer> inputs = new HashMap<>();
 		for(NodeSlot slot : n.getCurrentType().getSlots()) {
 			for(String s : slot.getActivePm().getInputs()) {
@@ -148,6 +150,7 @@ public class NodeEngine {
 		for(String key : inputs.keySet()) {
 			take(n, key, inputs.get(key), i);
 		}
+		b.update(false, false);
 	}
 	public void take(Node n, String path, Integer amount, Inventory i) {
 		for(ItemStack item : i.getContents()) {

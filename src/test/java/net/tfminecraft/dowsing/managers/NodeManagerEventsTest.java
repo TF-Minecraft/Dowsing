@@ -525,7 +525,7 @@ class NodeManagerEventsTest {
                 return true;
             });
             when(DowsingMain.plugin.getName()).thenReturn("Dowsing"); when(DowsingMain.plugin.isEnabled()).thenReturn(true);
-            NodeManager.nodes = new ArrayList<>(); NodeManager.extraCapacityByGuild = new HashMap<>();
+            NodeManager.nodes = new ArrayList<>(); NodeManager.extraCapacityByGuild = new HashMap<>(); NodeManager.forgetHeldChunks();
             Cache.extraCapacity = false; Cache.naturalYieldEnabled = false; Cache.cycleLength = 60;
             Cache.membersPerCapacity = 2; Cache.maxMemberCapacity = 5; Cache.minMembersForNode = 1;
             Cache.efficiencyLossPM = 5; Cache.efficiencyLossType = 40; Cache.refundPercentage = 0.8;
@@ -533,7 +533,7 @@ class NodeManagerEventsTest {
             when(guild.getId()).thenReturn("guild"); when(guild.getLeader()).thenReturn("Leader");
             when(guild.getMembers()).thenReturn(List.of("Leader", "Member")); when(guild.getBank()).thenReturn(bank);
             when(bank.getWealth()).thenReturn(1000.0); when(player.getName()).thenReturn("Leader"); when(player.getLocation()).thenReturn(location);
-            when(world.getChunkAt(any(Location.class))).thenReturn(chunk);
+            when(world.getChunkAt(any(Location.class))).thenReturn(chunk); when(world.isChunkLoaded(anyInt(), anyInt())).thenReturn(true);
             when(world.getBlockAt(anyInt(), anyInt(), anyInt())).thenReturn(worldBlock); when(world.getBlockAt(any(Location.class))).thenReturn(worldBlock);
             when(worldBlock.getLocation()).thenReturn(location); when(worldBlock.getWorld()).thenReturn(world); when(worldBlock.getType()).thenReturn(Material.BARRIER);
             Biome biome = mock(Biome.class); when(biome.toString()).thenReturn("PLAINS"); when(worldBlock.getBiome()).thenReturn(biome);
@@ -589,7 +589,7 @@ class NodeManagerEventsTest {
         }
         @Override public void close() throws Exception {
             inventories.close(); toggles.close(); types.close(); methods.close(); blocks.close(); factions.close(); MockBukkit.unmock();
-            DowsingMain.plugin = previousPlugin; NodeManager.nodes = previousNodes; NodeManager.extraCapacityByGuild = previousCapacity;
+            DowsingMain.plugin = previousPlugin; NodeManager.nodes = previousNodes; NodeManager.extraCapacityByGuild = previousCapacity; NodeManager.forgetHeldChunks();
             net.tfminecraft.simplefactions.Cache.maxExtraNodeCapacity = previousMaxCapacity;
             for (var entry : previousCache.entrySet()) entry.getKey().set(null, entry.getValue());
         }

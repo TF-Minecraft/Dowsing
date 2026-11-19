@@ -13,6 +13,7 @@ import java.util.UUID;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.World;
 import org.bukkit.Material;
 import org.bukkit.Particle;
 import org.bukkit.entity.Entity;
@@ -36,6 +37,7 @@ import net.tfminecraft.dowsing.objects.NodeBlock;
 import net.tfminecraft.dowsing.objects.NodeType;
 import net.tfminecraft.dowsing.utils.ItemDropper;
 import net.tfminecraft.dowsing.utils.NodeEngine;
+import net.tfminecraft.simplefactions.api.SimpleFactionsApi;
 import net.tfminecraft.simplefactions.guild.Guild;
 import net.tfminecraft.simplefactions.managers.FactionManager;
 import net.tfminecraft.simplefactions.objects.Faction;
@@ -159,7 +161,226 @@ class NodeManagerCyclesTest {
         try (Cycles cycles = new Cycles(); var droppers = mockConstruction(ItemDropper.class)) {
             f.manager.start(); cycles.tasks.get(1200L).run();
             verify(held, never()).tickCycle(); verify(held, never()).tick(); assertTrue(droppers.constructed().isEmpty());
-            verify(f.chunk, never()).setForceLoaded(true);
+            verify(f.world, never()).setChunkForceLoaded(0, 0, true);
+        }
+    }
+
+    @Test
+    void anIdleNodesChunkIsLetGoAndForcedAgainOnceItProduces() {
+        Node node = f.node; NodeManager.nodes.add(node);
+        // Switched off before a restart: the saved force flag is let go on the first pass.
+        when(f.world.isChunkForceLoaded(0, 0)).thenReturn(true);
+        NodeManager.holdNodeChunks();
+        verify(f.world).setChunkForceLoaded(0, 0, false);
+        when(f.world.isChunkForceLoaded(0, 0)).thenReturn(false); when(node.getIsActive()).thenReturn(true);
+        NodeManager.holdNodeChunks();
+        verify(f.world).setChunkForceLoaded(0, 0, true);
+        when(f.world.isChunkForceLoaded(0, 0)).thenReturn(true);
+        NodeManager.holdNodeChunks();
+        verify(f.world, times(1)).setChunkForceLoaded(0, 0, true);
+        when(node.getIsActive()).thenReturn(false);
+        NodeManager.holdNodeChunks();
+        verify(f.world, times(2)).setChunkForceLoaded(0, 0, false);
+    }
+
+    @Test
+    void afterTheFirstPassOnlyChunksThisStartForcedAreLetGo() {
+        Node idle = f.nodeAt(new Location(f.world, 40, 64, -20)); NodeManager.nodes.add(idle);
+        NodeManager.holdNodeChunks();
+        // Forced later by someone else, such as staff: Dowsing leaves it alone.
+        when(f.world.isChunkForceLoaded(2, -2)).thenReturn(true);
+        NodeManager.holdNodeChunks();
+        verify(f.world, never()).setChunkForceLoaded(2, -2, false);
+    }
+
+    @Test
+    void aBrokenNodesChunkIsLetGoAtOnceUnlessAnotherProducingNodeIsInIt() {
+        Node producing = f.nodeAt(f.location), removed = f.nodeAt(f.location);
+        when(producing.getIsActive()).thenReturn(true); when(removed.getIsActive()).thenReturn(true);
+        Node alone = f.nodeAt(new Location(f.world, 40, 64, -20)); when(alone.getIsActive()).thenReturn(true);
+        NodeManager.nodes.addAll(List.of(producing, removed, alone));
+        when(f.world.isChunkForceLoaded(anyInt(), anyInt())).thenReturn(true);
+        NodeManager.releaseChunkOf(removed);
+        verify(f.world, never()).setChunkForceLoaded(0, 0, false);
+        NodeManager.releaseChunkOf(alone);
+        verify(f.world).setChunkForceLoaded(2, -2, false);
+        NodeManager.releaseChunkOf(f.nodeAt(new Location(null, 1, 2, 3)));
+    }
+
+    @Test
+    void heldRealmAndUnownedNodesLetTheirChunksGo() {
+        World other = mock(World.class);
+        Node held = f.nodeAt(f.location), unowned = f.nodeAt(new Location(other, 20, 64, 20));
+        when(held.getIsActive()).thenReturn(true); when(f.guild.isHeld()).thenReturn(true);
+        when(unowned.getIsActive()).thenReturn(true); when(unowned.hasGuild()).thenReturn(false);
+        when(f.world.isChunkForceLoaded(0, 0)).thenReturn(true); when(other.isChunkForceLoaded(1, 1)).thenReturn(true);
+        NodeManager.nodes.addAll(List.of(held, unowned));
+        NodeManager.holdNodeChunks();
+        verify(f.world).setChunkForceLoaded(0, 0, false); verify(other).setChunkForceLoaded(1, 1, false);
+        verify(f.world, never()).setChunkForceLoaded(0, 0, true);
+    }
+
+    @Test
+    void chunkLoadingWaitsForSimpleFactionsAndSkipsNodesWithoutAWorld() {
+        Node noWorld = f.nodeAt(new Location(null, 1, 2, 3)), noLocation = f.nodeAt(f.location);
+        when(noWorld.getIsActive()).thenReturn(true); when(noLocation.getLoc()).thenReturn(null);
+        NodeManager.nodes.addAll(List.of(f.node, noWorld, noLocation));
+        when(f.node.getIsActive()).thenReturn(true);
+        net.tfminecraft.dowsing.testsupport.FactionFixture.api.when(SimpleFactionsApi::ready).thenReturn(false);
+        NodeManager.holdNodeChunks();
+        verify(f.world, never()).isChunkForceLoaded(anyInt(), anyInt());
+        net.tfminecraft.dowsing.testsupport.FactionFixture.api.when(SimpleFactionsApi::ready).thenReturn(true);
+        NodeManager.holdNodeChunks();
+        verify(f.world).setChunkForceLoaded(0, 0, true);
+    }
+
+    @Test
+    void aChunkLoadingFailureIsLoggedAndNodesStillProduce() {
+        Node node = f.node; when(node.getIsActive()).thenReturn(true); when(node.getTimeLeft()).thenReturn(10); when(node.getCycleTime()).thenReturn(1);
+        NodeManager.nodes.add(node);
+        when(f.world.isChunkForceLoaded(0, 0)).thenThrow(new IllegalStateException("world gone"));
+        try (Cycles cycles = new Cycles()) {
+            f.manager.start(); cycles.tasks.get(1200L).run();
+            verify(f.logger).log(eq(java.util.logging.Level.SEVERE), contains("Failed to hold node chunk 0, 0"), any(IllegalStateException.class));
+            verify(node).tick();
+        }
+    }
+
+    @Test
+    void aNodeThatCannotBeCheckedKeepsItsChunkAndTheOthersGoOn() {
+        Node broken = f.nodeAt(f.location), other = f.nodeAt(new Location(f.world, 40, 64, -20));
+        when(broken.getIsActive()).thenReturn(true); NodeManager.nodes.add(broken);
+        NodeManager.holdNodeChunks();
+        verify(f.world).setChunkForceLoaded(0, 0, true);
+        when(f.world.isChunkForceLoaded(0, 0)).thenReturn(true);
+        when(broken.hasGuild()).thenThrow(new IllegalStateException("guild lookup failed"));
+        when(other.getIsActive()).thenReturn(true); NodeManager.nodes.add(other);
+        try (Cycles cycles = new Cycles()) {
+            f.manager.start(); cycles.tasks.get(1200L).run();
+            verify(f.logger).log(eq(java.util.logging.Level.SEVERE), contains("for chunk loading"), any(IllegalStateException.class));
+            verify(f.world).setChunkForceLoaded(2, -2, true);
+            verify(f.world, never()).setChunkForceLoaded(0, 0, false);
+        }
+        // A node whose location cannot be read is skipped and logged.
+        Node lost = f.nodeAt(f.location); when(lost.getLoc()).thenThrow(new IllegalStateException("no location")); NodeManager.nodes.add(lost);
+        NodeManager.holdNodeChunks(); NodeManager.nodes.remove(lost);
+        verify(f.logger).log(eq(java.util.logging.Level.SEVERE), contains("Failed to find node"), any(IllegalStateException.class));
+        // Still tracked: once it can be checked again and is idle, it is let go.
+        doReturn(true).when(broken).hasGuild(); when(broken.getIsActive()).thenReturn(false);
+        NodeManager.holdNodeChunks();
+        verify(f.world).setChunkForceLoaded(0, 0, false);
+    }
+
+    @Test
+    void aFirstPassFailureStillLetsALaterPassClearAnOldFlag() {
+        Node node = f.node; when(node.getIsActive()).thenReturn(true); NodeManager.nodes.add(node);
+        when(f.world.isChunkForceLoaded(0, 0)).thenReturn(true);
+        when(node.hasGuild()).thenThrow(new IllegalStateException("guild lookup failed"));
+        NodeManager.holdNodeChunks();
+        verify(f.world, never()).setChunkForceLoaded(0, 0, false);
+        doReturn(true).when(node).hasGuild(); when(node.getIsActive()).thenReturn(false);
+        NodeManager.holdNodeChunks();
+        verify(f.world).setChunkForceLoaded(0, 0, false);
+    }
+
+    @Test
+    void noHeldChunkIsLetGoInAPassWhereANodesLocationCannotBeRead() {
+        Node node = f.node; when(node.getIsActive()).thenReturn(true); NodeManager.nodes.add(node);
+        NodeManager.holdNodeChunks();
+        when(f.world.isChunkForceLoaded(0, 0)).thenReturn(true);
+        when(node.getLoc()).thenThrow(new IllegalStateException("no location"));
+        NodeManager.holdNodeChunks();
+        verify(f.world, never()).setChunkForceLoaded(0, 0, false);
+        // Still tracked: once the location reads again and the node is idle, it is let go.
+        doReturn(f.location).when(node).getLoc(); when(node.getIsActive()).thenReturn(false);
+        NodeManager.holdNodeChunks();
+        verify(f.world).setChunkForceLoaded(0, 0, false);
+    }
+
+    @Test
+    void aFirstPassWithAnUnreadableLocationLetsNothingGoAndCleansUpLater() {
+        Node producing = f.nodeAt(f.location), idle = f.nodeAt(f.location);
+        when(producing.getIsActive()).thenReturn(true);
+        when(producing.getLoc()).thenThrow(new IllegalStateException("no location"));
+        NodeManager.nodes.addAll(List.of(producing, idle));
+        when(f.world.isChunkForceLoaded(0, 0)).thenReturn(true);
+        // The idle node shares the chunk of the node whose location cannot be read: not let go.
+        NodeManager.holdNodeChunks();
+        verify(f.world, never()).setChunkForceLoaded(0, 0, false);
+        // The first-pass clean-up still runs once every location reads.
+        doReturn(f.location).when(producing).getLoc(); when(producing.getIsActive()).thenReturn(false);
+        NodeManager.holdNodeChunks();
+        verify(f.world).setChunkForceLoaded(0, 0, false);
+    }
+
+    @Test
+    void aNodeThatFailsValidationDoesNotStopTheOthers() {
+        Node lost = f.nodeAt(f.location), invalid = f.nodeAt(f.location);
+        when(lost.getLoc()).thenThrow(new IllegalStateException("no location"));
+        NodeManager.nodes.addAll(List.of(lost, invalid));
+        when(f.worldBlock.getType()).thenReturn(Material.AIR);
+        f.manager.validate();
+        verify(invalid).breakNode(); assertFalse(NodeManager.nodes.contains(invalid)); assertTrue(NodeManager.nodes.contains(lost));
+        verify(f.logger).log(eq(java.util.logging.Level.SEVERE), contains("Failed to validate node"), any(IllegalStateException.class));
+    }
+
+    @Test
+    void aHeldChunkWhoseCheckFailsStaysTrackedAndIsLetGoLater() {
+        Node node = f.node; when(node.getIsActive()).thenReturn(true); NodeManager.nodes.add(node);
+        NodeManager.holdNodeChunks();
+        when(f.world.isChunkForceLoaded(0, 0)).thenThrow(new IllegalStateException("bad chunk"));
+        NodeManager.holdNodeChunks();
+        doReturn(true).when(f.world).isChunkForceLoaded(0, 0); when(node.getIsActive()).thenReturn(false);
+        NodeManager.holdNodeChunks();
+        verify(f.world).setChunkForceLoaded(0, 0, false);
+    }
+
+    @Test
+    void aFailedReleaseOfABrokenNodesChunkIsRetriedByTheNextPass() {
+        Node node = f.node; when(node.getIsActive()).thenReturn(true); NodeManager.nodes.add(node);
+        NodeManager.holdNodeChunks();
+        when(f.world.isChunkForceLoaded(0, 0)).thenThrow(new IllegalStateException("bad chunk"));
+        NodeManager.releaseChunkOf(node); NodeManager.nodes.remove(node);
+        doReturn(true).when(f.world).isChunkForceLoaded(0, 0);
+        NodeManager.holdNodeChunks();
+        verify(f.world).setChunkForceLoaded(0, 0, false);
+    }
+
+    @Test
+    void aChunkThatFailsIsRetriedAndDoesNotStopTheOthers() {
+        Node first = f.nodeAt(f.location), second = f.nodeAt(new Location(f.world, 40, 64, -20));
+        when(first.getIsActive()).thenReturn(true); when(second.getIsActive()).thenReturn(true);
+        NodeManager.nodes.addAll(List.of(first, second));
+        when(f.world.isChunkForceLoaded(0, 0)).thenThrow(new IllegalStateException("bad chunk"));
+        NodeManager.holdNodeChunks(); NodeManager.holdNodeChunks();
+        verify(f.world, atLeastOnce()).setChunkForceLoaded(2, -2, true);
+        verify(f.world, times(2)).isChunkForceLoaded(0, 0);
+        // A chunk that cannot be let go stays known and is tried again.
+        clearInvocations(f.world);
+        when(f.world.isChunkForceLoaded(2, -2)).thenThrow(new IllegalStateException("bad chunk"));
+        when(second.getIsActive()).thenReturn(false);
+        NodeManager.holdNodeChunks(); NodeManager.holdNodeChunks();
+        verify(f.world, times(2)).isChunkForceLoaded(2, -2);
+        verify(f.logger, atLeastOnce()).log(eq(java.util.logging.Level.SEVERE), contains("Failed to let go of node chunk 2, -2"), any(IllegalStateException.class));
+    }
+
+    @Test
+    void aBrokenIdleNodeLeavesAStaffForceLoadAloneAfterTheFirstPass() {
+        Node idle = f.nodeAt(new Location(f.world, 40, 64, -20)); NodeManager.nodes.add(idle);
+        NodeManager.holdNodeChunks();
+        when(f.world.isChunkForceLoaded(2, -2)).thenReturn(true);
+        NodeManager.releaseChunkOf(idle);
+        verify(f.world, never()).setChunkForceLoaded(2, -2, false);
+    }
+
+    @Test
+    void aPassNeverLoadsAnIdleNodesChunkToValidateIt() {
+        Node node = f.node; NodeManager.nodes.add(node);
+        when(f.world.isChunkLoaded(0, 0)).thenReturn(false);
+        try (Cycles cycles = new Cycles()) {
+            f.manager.start(); cycles.tasks.get(1200L).run();
+            verify(f.world, never()).getBlockAt(any(Location.class)); verify(node, never()).breakNode();
+            assertTrue(NodeManager.nodes.contains(node));
         }
     }
 
@@ -341,7 +562,7 @@ class NodeManagerCyclesTest {
                  doAnswer(inv -> { node.setInputCounter(node.getInputCounter() + 1); return null; }).when(engine).takeInputs(node);
              })) {
             f.manager.start(); cycles.tasks.get(1200L).run();
-            verify(f.chunk).setForceLoaded(true); verify(droppers.constructed().getFirst()).dropItems(node);
+            verify(f.world).setChunkForceLoaded(0, 0, true); verify(droppers.constructed().getFirst()).dropItems(node);
             assertEquals(29, node.getTimeLeft()); assertEquals(0, node.getCycleTime()); assertEquals(1, node.getInputCounter());
             verify(engines.constructed().getFirst()).takeInputs(node); assertTrue(node.getIsActive());
         }
@@ -411,8 +632,8 @@ class NodeManagerCyclesTest {
 
     @Test
     void inputFailureStopsTickingAndSuccessfulTicksUpdateMatchingOpenMenusOnly() {
-        Node node = f.node; when(node.getIsActive()).thenReturn(true, false); when(node.getTimeLeft()).thenReturn(10);
-        when(node.getCycleTime()).thenReturn(60); NodeManager.nodes.add(node); when(f.chunk.isForceLoaded()).thenReturn(true);
+        Node node = f.node; when(node.getIsActive()).thenReturn(true, true, false); when(node.getTimeLeft()).thenReturn(10);
+        when(node.getCycleTime()).thenReturn(60); NodeManager.nodes.add(node);
         try (Cycles cycles = new Cycles()) {
             f.manager.start(); cycles.tasks.get(1200L).run(); verify(node).input(); verify(node, never()).tick();
             when(node.getIsActive()).thenReturn(true); when(node.getCycleTime()).thenReturn(1);

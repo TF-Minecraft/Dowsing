@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
@@ -16,6 +17,7 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Particle;
 import org.bukkit.Sound;
+import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
@@ -277,15 +279,12 @@ public class NodeManager implements Listener{
 			   {
 					if (!DowsingMain.plugin.nodesReady()) return;
 					validate();
+					// Failures are handled per node and per chunk inside, so production below always runs.
+					holdNodeChunks();
 					for(Node n : nodes) {
 						try {
-						if(!n.getIsActive()) continue;
-						if(!n.hasGuild()) continue;
-						// A held realm's nodes pause until it is taken on.
-						if(Node.held(n.getGuild())) continue;
-						if(n.getLoc().getChunk().isForceLoaded() == false) {
-							n.getLoc().getChunk().setForceLoaded(true);
-						}
+						// Switched-off and unowned nodes wait, and a held realm's nodes pause until it is taken on.
+						if(!producing(n)) continue;
 						if(n.getTimeLeft() <= 0) {
 							if(!new ItemDropper().dropItems(n)) continue;
 							n.setTimeLeft(n.getModifiedTime());
@@ -319,6 +318,137 @@ public class NodeManager implements Listener{
 			   }
 		}.runTaskTimer(DowsingMain.plugin, 0L, 1200L);
 	}
+	/** Whether a node produces this pass: switched on, owned, and not in a held realm. */
+	static boolean producing(Node n) {
+		if(!n.getIsActive() || !n.hasGuild()) return false;
+		return !Node.held(n.getGuild());
+	}
+
+	/** A world chunk that holds a node. */
+	record NodeChunk(World world, int x, int z) {
+		static NodeChunk of(Node n) {
+			return at(n.getLoc());
+		}
+		static NodeChunk at(Location loc) {
+			if(loc == null || loc.getWorld() == null) return null;
+			return new NodeChunk(loc.getWorld(), loc.getBlockX() >> 4, loc.getBlockZ() >> 4);
+		}
+		boolean loaded() { return world.isChunkLoaded(x, z); }
+		boolean forced() { return world.isChunkForceLoaded(x, z); }
+		void force(boolean on) { world.setChunkForceLoaded(x, z, on); }
+	}
+
+	/** The chunks the passes of this start force-loaded for producing nodes. */
+	private static final Set<NodeChunk> heldChunks = new HashSet<>();
+	/** Whether this start has let go of the idle node chunks an earlier start left force-loaded. */
+	private static boolean startCleared = false;
+
+	/**
+	 * Keeps a producing node's chunk force-loaded, so it produces and its hopper runs with nobody near,
+	 * and lets go of the chunk once no node in it produces: switched off, unowned or in a held realm. A
+	 * removed node's chunk is let go when it breaks ({@link #releaseChunkOf}). A forced chunk never unloads
+	 * and keeps every chunk a player loads within 13 chunks of it in memory, so an idle node's chunk must
+	 * not stay forced. The force flag (not a plugin ticket) is kept on purpose: like before, it keeps the
+	 * world ticking hoppers while nobody is online. It is saved with the world, so the first pass of each
+	 * start lets go of the chunk of every idle node Dowsing loaded, including those Dowsing 3.4 and older
+	 * never let go; spots of nodes removed before this version are not known and need a manual check.
+	 * Later passes only touch chunks this start forced. Waits for SimpleFactions, which says who owns a node.
+	 */
+	static void holdNodeChunks() {
+		if(!SimpleFactionsApi.ready()) return;
+		Set<NodeChunk> wanted = new HashSet<>();
+		Set<NodeChunk> unknown = new HashSet<>();
+		Set<NodeChunk> idle = new HashSet<>(heldChunks);
+		boolean lookupFailed = false;
+		for(Node n : nodes) {
+			NodeChunk chunk;
+			try {
+				chunk = NodeChunk.of(n);
+			} catch(RuntimeException ex) {
+				logChunkFailure("Failed to find node " + n.getId() + "'s chunk", ex);
+				lookupFailed = true;
+				continue;
+			}
+			if(chunk == null) continue;
+			try {
+				if(producing(n)) wanted.add(chunk);
+				else if(!startCleared) idle.add(chunk);
+			} catch(RuntimeException ex) {
+				// Not known whether it produces: its chunk keeps what it had and is not let go.
+				logChunkFailure("Failed to check node " + n.getId() + " for chunk loading", ex);
+				unknown.add(chunk);
+			}
+		}
+		idle.removeAll(wanted);
+		idle.removeAll(unknown);
+		Set<NodeChunk> next = new HashSet<>();
+		if(lookupFailed) {
+			// A node whose chunk is unknown may be in any of them: nothing is let go this pass. Held
+			// chunks stay tracked, and the first pass's clean-up waits for a pass that knows every chunk.
+			for(NodeChunk chunk : idle) {
+				if(heldChunks.contains(chunk)) next.add(chunk);
+			}
+			idle.clear();
+		}
+		// On the first pass a chunk that could not be handled is tracked anyway, so a later pass can still
+		// let go of a flag an earlier start left on it.
+		boolean keepAll = !startCleared;
+		for(NodeChunk chunk : wanted) {
+			// A held chunk that could not be checked stays held, so it is still let go once idle.
+			if(setForced(chunk, true) || keepAll || heldChunks.contains(chunk)) next.add(chunk);
+		}
+		for(NodeChunk chunk : idle) {
+			// Kept when it could not be let go, so the next pass tries again.
+			if(!setForced(chunk, false)) next.add(chunk);
+		}
+		for(NodeChunk chunk : unknown) {
+			if(keepAll || heldChunks.contains(chunk)) next.add(chunk);
+		}
+		heldChunks.clear();
+		heldChunks.addAll(next);
+		if(!lookupFailed) startCleared = true;
+	}
+
+	private static void logChunkFailure(String message, RuntimeException ex) {
+		DowsingMain.plugin.getLogger().log(java.util.logging.Level.SEVERE, message, ex);
+	}
+
+	/** Sets one chunk's force flag; a failing chunk is logged and does not stop the others. */
+	private static boolean setForced(NodeChunk chunk, boolean on) {
+		try {
+			if(chunk.forced() != on) chunk.force(on);
+			return true;
+		} catch(RuntimeException ex) {
+			DowsingMain.plugin.getLogger().log(java.util.logging.Level.SEVERE,
+					"Failed to " + (on ? "hold" : "let go of") + " node chunk " + chunk.x() + ", " + chunk.z(), ex);
+			return false;
+		}
+	}
+
+	/**
+	 * Lets go of a removed node's chunk right away, unless another producing node is in it, so the saved
+	 * force flag cannot outlive the node when the server stops before the next pass.
+	 */
+	public static void releaseChunkOf(Node removed) {
+		NodeChunk chunk = NodeChunk.of(removed);
+		if(chunk == null) return;
+		for(Node n : nodes) {
+			if(n != removed && chunk.equals(NodeChunk.of(n)) && producing(n)) return;
+		}
+		// Only a chunk Dowsing holds, or any node chunk before the first pass has cleared them; a staff
+		// force-load made later on an idle node's chunk is left alone.
+		if(!heldChunks.contains(chunk) && startCleared) return;
+		// Tracked until it is let go, so a failed release is tried again by the next pass.
+		if(setForced(chunk, false)) heldChunks.remove(chunk);
+		else heldChunks.add(chunk);
+	}
+
+	/** Forgets what this start held and cleared, for tests. */
+	static void forgetHeldChunks() {
+		heldChunks.clear();
+		startCleared = false;
+	}
+
 	/** Every 30 s: resync node benefits when a node's guild or realm changed without a node event. */
 	public void realmCycle(){
 		new BukkitRunnable()
@@ -376,9 +506,18 @@ public class NodeManager implements Listener{
 		if (!SimpleFactionsApi.ready()) return;
 		for(int i = 0; i<nodes.size();i++) {
 			Node n = nodes.get(i);
-			if(!n.getLoc().getBlock().getType().equals(Material.BARRIER)) {
-				n.breakNode();
-				nodes.remove(i--);
+			try {
+				// Reading a block in an unloaded chunk loads it on the main thread. Nobody can break a node
+				// whose chunk is not loaded, so it is checked when its chunk is next loaded.
+				NodeChunk chunk = NodeChunk.of(n);
+				if(chunk == null || !chunk.loaded()) continue;
+				if(!n.getLoc().getBlock().getType().equals(Material.BARRIER)) {
+					n.breakNode();
+					nodes.remove(i--);
+				}
+			} catch(RuntimeException ex) {
+				// One node that cannot be checked does not stop the others or the pass.
+				logChunkFailure("Failed to validate node " + n.getId(), ex);
 			}
 		}
 	}
@@ -470,7 +609,8 @@ public class NodeManager implements Listener{
 			return;
 		}
 		for(Node node : nodes) {
-			if(node.getLoc().getChunk().equals(loc.getChunk())) {
+			// Compared by position, so placing a node does not load every other node's chunk.
+			if(java.util.Objects.equals(NodeChunk.of(node), NodeChunk.at(loc))) {
 				p.sendMessage("§cThere is already a node on this land!");
 				e.setCancelled(true);
 				return;
