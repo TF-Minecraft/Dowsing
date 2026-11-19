@@ -759,6 +759,7 @@ public class Node {
 		// Stale menus can repeat removal; the node item and held output must drop only once.
 		if(this.broken) return;
 		this.broken = true;
+		NodeManager.releaseChunkOf(this);
 		String path = this.getBlock().getBlock();
 		String type = path.split("\\.")[0];
 		if(type.equalsIgnoreCase("v")) {

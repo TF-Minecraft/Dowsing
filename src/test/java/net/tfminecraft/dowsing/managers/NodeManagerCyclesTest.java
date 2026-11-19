@@ -161,71 +161,84 @@ class NodeManagerCyclesTest {
         try (Cycles cycles = new Cycles(); var droppers = mockConstruction(ItemDropper.class)) {
             f.manager.start(); cycles.tasks.get(1200L).run();
             verify(held, never()).tickCycle(); verify(held, never()).tick(); assertTrue(droppers.constructed().isEmpty());
-            verify(f.world, never()).addPluginChunkTicket(eq(0), eq(0), any());
+            verify(f.world, never()).setChunkForceLoaded(0, 0, true);
         }
     }
 
     @Test
-    void anIdleNodesChunkIsLetGoAndHeldAgainOnceItProduces() {
+    void anIdleNodesChunkIsLetGoAndForcedAgainOnceItProduces() {
         Node node = f.node; NodeManager.nodes.add(node);
+        // Switched off before a restart: the saved force flag is let go on the first pass.
+        when(f.world.isChunkForceLoaded(0, 0)).thenReturn(true);
         NodeManager.holdNodeChunks();
-        verify(f.world, never()).addPluginChunkTicket(anyInt(), anyInt(), any());
-        when(node.getIsActive()).thenReturn(true);
-        NodeManager.holdNodeChunks(); NodeManager.holdNodeChunks();
-        verify(f.world, times(1)).addPluginChunkTicket(0, 0, DowsingMain.plugin);
+        verify(f.world).setChunkForceLoaded(0, 0, false);
+        when(f.world.isChunkForceLoaded(0, 0)).thenReturn(false); when(node.getIsActive()).thenReturn(true);
+        NodeManager.holdNodeChunks();
+        verify(f.world).setChunkForceLoaded(0, 0, true);
+        when(f.world.isChunkForceLoaded(0, 0)).thenReturn(true);
+        NodeManager.holdNodeChunks();
+        verify(f.world, times(1)).setChunkForceLoaded(0, 0, true);
         when(node.getIsActive()).thenReturn(false);
         NodeManager.holdNodeChunks();
-        verify(f.world).removePluginChunkTicket(0, 0, DowsingMain.plugin);
+        verify(f.world, times(2)).setChunkForceLoaded(0, 0, false);
     }
 
     @Test
-    void aRemovedNodesChunkIsLetGoButAChunkAnotherNodeProducesInStaysHeld() {
-        Node producing = f.nodeAt(f.location), idle = f.nodeAt(f.location);
-        when(producing.getIsActive()).thenReturn(true);
-        Node removed = f.nodeAt(new Location(f.world, 40, 64, -20)); when(removed.getIsActive()).thenReturn(true);
-        NodeManager.nodes.addAll(List.of(producing, idle, removed));
+    void afterTheFirstPassOnlyChunksThisStartForcedAreLetGo() {
+        Node idle = f.nodeAt(new Location(f.world, 40, 64, -20)); NodeManager.nodes.add(idle);
         NodeManager.holdNodeChunks();
-        verify(f.world).addPluginChunkTicket(0, 0, DowsingMain.plugin); verify(f.world).addPluginChunkTicket(2, -2, DowsingMain.plugin);
-        NodeManager.nodes.remove(removed);
+        // Forced later by someone else, such as staff: Dowsing leaves it alone.
+        when(f.world.isChunkForceLoaded(2, -2)).thenReturn(true);
         NodeManager.holdNodeChunks();
-        verify(f.world).removePluginChunkTicket(2, -2, DowsingMain.plugin);
-        verify(f.world, never()).removePluginChunkTicket(0, 0, DowsingMain.plugin);
+        verify(f.world, never()).setChunkForceLoaded(2, -2, false);
     }
 
     @Test
-    void heldRealmAndUnownedNodesAreNotHeldAndOldForceFlagsGoOncePerStart() {
+    void aBrokenNodesChunkIsLetGoAtOnceUnlessAnotherProducingNodeIsInIt() {
+        Node producing = f.nodeAt(f.location), removed = f.nodeAt(f.location);
+        when(producing.getIsActive()).thenReturn(true); when(removed.getIsActive()).thenReturn(true);
+        Node alone = f.nodeAt(new Location(f.world, 40, 64, -20)); when(alone.getIsActive()).thenReturn(true);
+        NodeManager.nodes.addAll(List.of(producing, removed, alone));
+        when(f.world.isChunkForceLoaded(anyInt(), anyInt())).thenReturn(true);
+        NodeManager.releaseChunkOf(removed);
+        verify(f.world, never()).setChunkForceLoaded(0, 0, false);
+        NodeManager.releaseChunkOf(alone);
+        verify(f.world).setChunkForceLoaded(2, -2, false);
+        NodeManager.releaseChunkOf(f.nodeAt(new Location(null, 1, 2, 3)));
+    }
+
+    @Test
+    void heldRealmAndUnownedNodesLetTheirChunksGo() {
         World other = mock(World.class);
-        Node held = f.nodeAt(f.location), unowned = f.nodeAt(new Location(other, 20, 64, 20)), twin = f.nodeAt(f.location);
+        Node held = f.nodeAt(f.location), unowned = f.nodeAt(new Location(other, 20, 64, 20));
         when(held.getIsActive()).thenReturn(true); when(f.guild.isHeld()).thenReturn(true);
         when(unowned.getIsActive()).thenReturn(true); when(unowned.hasGuild()).thenReturn(false);
         when(f.world.isChunkForceLoaded(0, 0)).thenReturn(true); when(other.isChunkForceLoaded(1, 1)).thenReturn(true);
-        NodeManager.nodes.addAll(List.of(held, unowned, twin));
-        NodeManager.holdNodeChunks(); NodeManager.holdNodeChunks();
-        verify(f.world, never()).addPluginChunkTicket(anyInt(), anyInt(), any()); verify(other, never()).addPluginChunkTicket(anyInt(), anyInt(), any());
-        // A flag an older Dowsing left is cleared on the first pass of a start, once per chunk.
-        verify(f.world, times(1)).setChunkForceLoaded(0, 0, false); verify(other, times(1)).setChunkForceLoaded(1, 1, false);
-        verify(f.world, times(1)).isChunkForceLoaded(0, 0);
+        NodeManager.nodes.addAll(List.of(held, unowned));
+        NodeManager.holdNodeChunks();
+        verify(f.world).setChunkForceLoaded(0, 0, false); verify(other).setChunkForceLoaded(1, 1, false);
+        verify(f.world, never()).setChunkForceLoaded(0, 0, true);
     }
 
     @Test
-    void chunkHoldingWaitsForSimpleFactionsAndSkipsNodesWithoutAWorld() {
+    void chunkLoadingWaitsForSimpleFactionsAndSkipsNodesWithoutAWorld() {
         Node noWorld = f.nodeAt(new Location(null, 1, 2, 3)), noLocation = f.nodeAt(f.location);
         when(noWorld.getIsActive()).thenReturn(true); when(noLocation.getLoc()).thenReturn(null);
         NodeManager.nodes.addAll(List.of(f.node, noWorld, noLocation));
         when(f.node.getIsActive()).thenReturn(true);
         net.tfminecraft.dowsing.testsupport.FactionFixture.api.when(SimpleFactionsApi::ready).thenReturn(false);
         NodeManager.holdNodeChunks();
-        verify(f.world, never()).addPluginChunkTicket(anyInt(), anyInt(), any()); verify(f.world, never()).isChunkForceLoaded(anyInt(), anyInt());
+        verify(f.world, never()).isChunkForceLoaded(anyInt(), anyInt());
         net.tfminecraft.dowsing.testsupport.FactionFixture.api.when(SimpleFactionsApi::ready).thenReturn(true);
         NodeManager.holdNodeChunks();
-        verify(f.world).addPluginChunkTicket(0, 0, DowsingMain.plugin);
+        verify(f.world).setChunkForceLoaded(0, 0, true);
     }
 
     @Test
-    void aChunkHoldingFailureIsLoggedAndNodesStillProduce() {
+    void aChunkLoadingFailureIsLoggedAndNodesStillProduce() {
         Node node = f.node; when(node.getIsActive()).thenReturn(true); when(node.getTimeLeft()).thenReturn(10); when(node.getCycleTime()).thenReturn(1);
         NodeManager.nodes.add(node);
-        when(f.world.addPluginChunkTicket(0, 0, DowsingMain.plugin)).thenThrow(new IllegalStateException("world gone"));
+        when(f.world.isChunkForceLoaded(0, 0)).thenThrow(new IllegalStateException("world gone"));
         try (Cycles cycles = new Cycles()) {
             f.manager.start(); cycles.tasks.get(1200L).run();
             verify(f.logger).log(eq(java.util.logging.Level.SEVERE), contains("Failed to update node chunk loading"), any(IllegalStateException.class));
@@ -422,7 +435,7 @@ class NodeManagerCyclesTest {
                  doAnswer(inv -> { node.setInputCounter(node.getInputCounter() + 1); return null; }).when(engine).takeInputs(node);
              })) {
             f.manager.start(); cycles.tasks.get(1200L).run();
-            verify(f.world).addPluginChunkTicket(0, 0, DowsingMain.plugin); verify(droppers.constructed().getFirst()).dropItems(node);
+            verify(f.world).setChunkForceLoaded(0, 0, true); verify(droppers.constructed().getFirst()).dropItems(node);
             assertEquals(29, node.getTimeLeft()); assertEquals(0, node.getCycleTime()); assertEquals(1, node.getInputCounter());
             verify(engines.constructed().getFirst()).takeInputs(node); assertTrue(node.getIsActive());
         }
