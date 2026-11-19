@@ -330,49 +330,68 @@ public class NodeManager implements Listener{
 	/** A world chunk that holds a node. */
 	record NodeChunk(World world, int x, int z) {
 		static NodeChunk of(Node n) {
-			Location loc = n.getLoc();
+			return at(n.getLoc());
+		}
+		static NodeChunk at(Location loc) {
 			if(loc == null || loc.getWorld() == null) return null;
 			return new NodeChunk(loc.getWorld(), loc.getBlockX() >> 4, loc.getBlockZ() >> 4);
 		}
-		boolean forced() { return world.isChunkForceLoaded(x, z); }
-		void force(boolean on) { world.setChunkForceLoaded(x, z, on); }
+		boolean loaded() { return world.isChunkLoaded(x, z); }
+		void hold() { world.addPluginChunkTicket(x, z, DowsingMain.plugin); }
+		void release() { world.removePluginChunkTicket(x, z, DowsingMain.plugin); }
 	}
 
-	/** The chunks the last pass kept loaded for producing nodes. */
+	/** The chunks Dowsing's ticket holds for producing nodes. */
 	private static final Set<NodeChunk> heldChunks = new HashSet<>();
+	/** Whether this start has cleared the force flags older Dowsing versions left on node chunks. */
+	private static boolean legacyFlagsCleared = false;
 
 	/**
-	 * Keeps a producing node's chunk loaded, so it produces and its hopper runs with nobody near, and
-	 * lets go of the chunk once no node in it produces: switched off, unowned, in a held realm or removed.
-	 * A forced chunk never unloads and keeps every chunk a player loads within 13 chunks of it in memory
-	 * until the next restart, so an idle node's chunk must not stay forced. Waits for SimpleFactions,
-	 * which says who owns a node. The force flag is saved with the world, so after a restart the chunks
-	 * of the nodes that are idle by then are let go on the first pass.
+	 * Keeps a producing node's chunk loaded with Dowsing's own chunk ticket, so it produces and its hopper
+	 * runs with nobody near, and lets go of the chunk once no node in it produces: switched off, unowned,
+	 * in a held realm or removed. A held chunk never unloads and keeps every chunk a player loads within
+	 * 13 chunks of it in memory, so an idle node's chunk must not stay held. The ticket belongs to Dowsing
+	 * alone, is not saved with the world and goes when the plugin stops, so a removed node's chunk cannot
+	 * stay loaded past a restart and staff force-loads are left alone. Waits for SimpleFactions, which says
+	 * who owns a node.
 	 */
 	static void holdNodeChunks() {
 		if(!SimpleFactionsApi.ready()) return;
 		Set<NodeChunk> wanted = new HashSet<>();
-		Set<NodeChunk> idle = new HashSet<>(heldChunks);
 		for(Node n : nodes) {
 			NodeChunk chunk = NodeChunk.of(n);
-			if(chunk == null) continue;
-			if(producing(n)) wanted.add(chunk);
-			else idle.add(chunk);
+			if(chunk != null && producing(n)) wanted.add(chunk);
 		}
-		idle.removeAll(wanted);
+		if(!legacyFlagsCleared) clearLegacyForceFlags();
+		for(NodeChunk chunk : heldChunks) {
+			if(!wanted.contains(chunk)) chunk.release();
+		}
 		for(NodeChunk chunk : wanted) {
-			if(!chunk.forced()) chunk.force(true);
-		}
-		for(NodeChunk chunk : idle) {
-			if(chunk.forced()) chunk.force(false);
+			if(!heldChunks.contains(chunk)) chunk.hold();
 		}
 		heldChunks.clear();
 		heldChunks.addAll(wanted);
 	}
 
+	/**
+	 * Dowsing 3.4 and older force-loaded every node chunk it ever used and never undid it. The flag is
+	 * saved with the world, so the first pass of each start clears it on node chunks; the ticket above
+	 * holds the producing ones from then on.
+	 */
+	private static void clearLegacyForceFlags() {
+		Set<NodeChunk> seen = new HashSet<>();
+		for(Node n : nodes) {
+			NodeChunk chunk = NodeChunk.of(n);
+			if(chunk == null || !seen.add(chunk)) continue;
+			if(chunk.world().isChunkForceLoaded(chunk.x(), chunk.z())) chunk.world().setChunkForceLoaded(chunk.x(), chunk.z(), false);
+		}
+		legacyFlagsCleared = true;
+	}
+
 	/** Forgets the chunks held this uptime, for tests. */
 	static void forgetHeldChunks() {
 		heldChunks.clear();
+		legacyFlagsCleared = false;
 	}
 
 	/** Every 30 s: resync node benefits when a node's guild or realm changed without a node event. */
@@ -432,6 +451,10 @@ public class NodeManager implements Listener{
 		if (!SimpleFactionsApi.ready()) return;
 		for(int i = 0; i<nodes.size();i++) {
 			Node n = nodes.get(i);
+			// Reading a block in an unloaded chunk loads it on the main thread. Nobody can break a node
+			// whose chunk is not loaded, so it is checked when its chunk is next loaded.
+			NodeChunk chunk = NodeChunk.of(n);
+			if(chunk == null || !chunk.loaded()) continue;
 			if(!n.getLoc().getBlock().getType().equals(Material.BARRIER)) {
 				n.breakNode();
 				nodes.remove(i--);
@@ -526,7 +549,8 @@ public class NodeManager implements Listener{
 			return;
 		}
 		for(Node node : nodes) {
-			if(node.getLoc().getChunk().equals(loc.getChunk())) {
+			// Compared by position, so placing a node does not load every other node's chunk.
+			if(java.util.Objects.equals(NodeChunk.of(node), NodeChunk.at(loc))) {
 				p.sendMessage("§cThere is already a node on this land!");
 				e.setCancelled(true);
 				return;

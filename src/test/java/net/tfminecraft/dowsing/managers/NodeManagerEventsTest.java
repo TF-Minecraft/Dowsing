@@ -533,7 +533,7 @@ class NodeManagerEventsTest {
             when(guild.getId()).thenReturn("guild"); when(guild.getLeader()).thenReturn("Leader");
             when(guild.getMembers()).thenReturn(List.of("Leader", "Member")); when(guild.getBank()).thenReturn(bank);
             when(bank.getWealth()).thenReturn(1000.0); when(player.getName()).thenReturn("Leader"); when(player.getLocation()).thenReturn(location);
-            when(world.getChunkAt(any(Location.class))).thenReturn(chunk);
+            when(world.getChunkAt(any(Location.class))).thenReturn(chunk); when(world.isChunkLoaded(anyInt(), anyInt())).thenReturn(true);
             when(world.getBlockAt(anyInt(), anyInt(), anyInt())).thenReturn(worldBlock); when(world.getBlockAt(any(Location.class))).thenReturn(worldBlock);
             when(worldBlock.getLocation()).thenReturn(location); when(worldBlock.getWorld()).thenReturn(world); when(worldBlock.getType()).thenReturn(Material.BARRIER);
             Biome biome = mock(Biome.class); when(biome.toString()).thenReturn("PLAINS"); when(worldBlock.getBiome()).thenReturn(biome);

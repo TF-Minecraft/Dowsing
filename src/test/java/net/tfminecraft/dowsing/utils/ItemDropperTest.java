@@ -291,6 +291,22 @@ class ItemDropperTest {
 		verify(node).setPendingResult(null); verify(node).setLastResult(Map.of("v.STONE", 130));
 	}
 
+	@Test
+	void outputMeantForAHopperThatWentAwayIsDroppedOnTopInstead() {
+		World world = mock(World.class);
+		Node node = nodeAt(new Location(world, 4, 60, 7), Map.of("v.STONE", 1.0), 3);
+		Inventory inventory = hopperAbove(world);
+		when(inventory.addItem(any(ItemStack.class))).thenReturn(new HashMap<>());
+		when(lastHopper.update(false, false)).thenReturn(false);
+		ItemStack template = mock(ItemStack.class); when(template.getMaxStackSize()).thenReturn(64);
+		ItemStack delivered = mock(ItemStack.class); when(template.clone()).thenReturn(delivered);
+		Item dropped = mock(Item.class); when(world.dropItem(any(Location.class), any(ItemStack.class))).thenReturn(dropped);
+		assertTrue(new ItemDropper(path -> template, message -> fail(message)).dropItems(node));
+		verify(world).dropItem(new Location(world, 4.5, 62, 7.5), delivered);
+		verify(delivered, atLeastOnce()).setAmount(3);
+		verify(node).setLastResult(Map.of("v.STONE", 3));
+	}
+
 	private Hopper lastHopper;
 
 	private Inventory hopperAbove(World world) {

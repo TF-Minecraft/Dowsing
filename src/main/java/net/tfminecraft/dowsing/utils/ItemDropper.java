@@ -96,8 +96,14 @@ public class ItemDropper {
 			// Filled through the snapshot and written back, which marks the chunk changed. Filling the
 			// live inventory did not, so output the hopper could not pass on was gone after the chunk
 			// unloaded or the server restarted.
-			int spilled = deliverToHopper(hopper.getSnapshotInventory(), items, result, loc);
-			hopper.update(false, false);
+			Map<String, Integer> delivered = new HashMap<>();
+			int spilled = deliverToHopper(hopper.getSnapshotInventory(), items, result, loc, delivered);
+			if(!hopper.update(false, false)) {
+				// The hopper went away in the meantime: what was meant for it goes on top instead.
+				for(Map.Entry<String, Integer> entry : delivered.entrySet()) {
+					dropLoose(loc, items.get(entry.getKey()), entry.getValue());
+				}
+			}
 			if(spilled > 0) warnSpill(n, above, spilled);
 		} else {
 			for(Map.Entry<String, Integer> entry : result.entrySet()) {
@@ -112,7 +118,8 @@ public class ItemDropper {
 	 * Fills the hopper with what fits and spills the rest on top of it, where the hopper
 	 * can still pull it in as it drains. Returns how many items spilled.
 	 */
-	private int deliverToHopper(Inventory inventory, Map<String, ItemStack> items, Map<String, Integer> result, Location loc) {
+	private int deliverToHopper(Inventory inventory, Map<String, ItemStack> items, Map<String, Integer> result, Location loc,
+			Map<String, Integer> deliveredByKey) {
 		int delivered = 0;
 		int spilled = 0;
 		for(Map.Entry<String, Integer> entry : result.entrySet()) {
@@ -124,6 +131,7 @@ public class ItemDropper {
 			}
 			dropLoose(loc, items.get(entry.getKey()), left);
 			delivered += entry.getValue() - left;
+			if(entry.getValue() > left) deliveredByKey.put(entry.getKey(), entry.getValue() - left);
 			spilled += left;
 		}
 		if(delivered > 0) loc.getWorld().playSound(loc, Sound.ENTITY_ITEM_PICKUP, 0.5f, 1f);
