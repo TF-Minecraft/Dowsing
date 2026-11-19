@@ -13,6 +13,7 @@ import java.util.UUID;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.World;
 import org.bukkit.Material;
 import org.bukkit.Particle;
 import org.bukkit.entity.Entity;
@@ -36,6 +37,7 @@ import net.tfminecraft.dowsing.objects.NodeBlock;
 import net.tfminecraft.dowsing.objects.NodeType;
 import net.tfminecraft.dowsing.utils.ItemDropper;
 import net.tfminecraft.dowsing.utils.NodeEngine;
+import net.tfminecraft.simplefactions.api.SimpleFactionsApi;
 import net.tfminecraft.simplefactions.guild.Guild;
 import net.tfminecraft.simplefactions.managers.FactionManager;
 import net.tfminecraft.simplefactions.objects.Faction;
@@ -159,7 +161,75 @@ class NodeManagerCyclesTest {
         try (Cycles cycles = new Cycles(); var droppers = mockConstruction(ItemDropper.class)) {
             f.manager.start(); cycles.tasks.get(1200L).run();
             verify(held, never()).tickCycle(); verify(held, never()).tick(); assertTrue(droppers.constructed().isEmpty());
-            verify(f.chunk, never()).setForceLoaded(true);
+            verify(f.world, never()).setChunkForceLoaded(0, 0, true);
+        }
+    }
+
+    @Test
+    void anIdleNodesChunkIsLetGoAndForcedAgainOnceItProduces() {
+        Node node = f.node; NodeManager.nodes.add(node);
+        // Switched off before a restart: the saved force flag is let go on the first pass.
+        when(f.world.isChunkForceLoaded(0, 0)).thenReturn(true);
+        NodeManager.holdNodeChunks();
+        verify(f.world).setChunkForceLoaded(0, 0, false);
+        when(f.world.isChunkForceLoaded(0, 0)).thenReturn(false); when(node.getIsActive()).thenReturn(true);
+        NodeManager.holdNodeChunks();
+        verify(f.world).setChunkForceLoaded(0, 0, true);
+        when(f.world.isChunkForceLoaded(0, 0)).thenReturn(true);
+        NodeManager.holdNodeChunks();
+        verify(f.world, times(1)).setChunkForceLoaded(0, 0, true); verify(f.world, times(1)).setChunkForceLoaded(0, 0, false);
+    }
+
+    @Test
+    void aRemovedNodesChunkIsLetGoButAChunkAnotherNodeProducesInStaysLoaded() {
+        Node producing = f.nodeAt(f.location), idle = f.nodeAt(f.location);
+        when(producing.getIsActive()).thenReturn(true);
+        Node removed = f.nodeAt(new Location(f.world, 40, 64, -20)); when(removed.getIsActive()).thenReturn(true);
+        NodeManager.nodes.addAll(List.of(producing, idle, removed));
+        NodeManager.holdNodeChunks();
+        verify(f.world).setChunkForceLoaded(0, 0, true); verify(f.world).setChunkForceLoaded(2, -2, true);
+        when(f.world.isChunkForceLoaded(anyInt(), anyInt())).thenReturn(true);
+        NodeManager.nodes.remove(removed);
+        NodeManager.holdNodeChunks();
+        verify(f.world).setChunkForceLoaded(2, -2, false);
+        verify(f.world, never()).setChunkForceLoaded(0, 0, false);
+    }
+
+    @Test
+    void aHeldRealmsNodeAndAnUnownedNodeLetTheirChunksGo() {
+        World other = mock(World.class);
+        Node held = f.nodeAt(f.location), unowned = f.nodeAt(new Location(other, 20, 64, 20));
+        when(held.getIsActive()).thenReturn(true); when(f.guild.isHeld()).thenReturn(true);
+        when(unowned.getIsActive()).thenReturn(true); when(unowned.hasGuild()).thenReturn(false);
+        when(f.world.isChunkForceLoaded(0, 0)).thenReturn(true); when(other.isChunkForceLoaded(1, 1)).thenReturn(true);
+        NodeManager.nodes.addAll(List.of(held, unowned));
+        NodeManager.holdNodeChunks();
+        verify(f.world).setChunkForceLoaded(0, 0, false); verify(other).setChunkForceLoaded(1, 1, false);
+    }
+
+    @Test
+    void chunkLoadingWaitsForSimpleFactionsAndSkipsNodesWithoutAWorld() {
+        Node noWorld = f.nodeAt(new Location(null, 1, 2, 3)), noLocation = f.nodeAt(f.location);
+        when(noWorld.getIsActive()).thenReturn(true); when(noLocation.getLoc()).thenReturn(null);
+        NodeManager.nodes.addAll(List.of(f.node, noWorld, noLocation));
+        when(f.node.getIsActive()).thenReturn(true);
+        net.tfminecraft.dowsing.testsupport.FactionFixture.api.when(SimpleFactionsApi::ready).thenReturn(false);
+        NodeManager.holdNodeChunks();
+        verify(f.world, never()).isChunkForceLoaded(anyInt(), anyInt());
+        net.tfminecraft.dowsing.testsupport.FactionFixture.api.when(SimpleFactionsApi::ready).thenReturn(true);
+        NodeManager.holdNodeChunks();
+        verify(f.world).setChunkForceLoaded(0, 0, true);
+    }
+
+    @Test
+    void aChunkLoadingFailureIsLoggedAndNodesStillProduce() {
+        Node node = f.node; when(node.getIsActive()).thenReturn(true); when(node.getTimeLeft()).thenReturn(10); when(node.getCycleTime()).thenReturn(1);
+        NodeManager.nodes.add(node);
+        when(f.world.isChunkForceLoaded(0, 0)).thenThrow(new IllegalStateException("world gone"));
+        try (Cycles cycles = new Cycles()) {
+            f.manager.start(); cycles.tasks.get(1200L).run();
+            verify(f.logger).log(eq(java.util.logging.Level.SEVERE), contains("Failed to update node chunk loading"), any(IllegalStateException.class));
+            verify(node).tick();
         }
     }
 
@@ -341,7 +411,7 @@ class NodeManagerCyclesTest {
                  doAnswer(inv -> { node.setInputCounter(node.getInputCounter() + 1); return null; }).when(engine).takeInputs(node);
              })) {
             f.manager.start(); cycles.tasks.get(1200L).run();
-            verify(f.chunk).setForceLoaded(true); verify(droppers.constructed().getFirst()).dropItems(node);
+            verify(f.world).setChunkForceLoaded(0, 0, true); verify(droppers.constructed().getFirst()).dropItems(node);
             assertEquals(29, node.getTimeLeft()); assertEquals(0, node.getCycleTime()); assertEquals(1, node.getInputCounter());
             verify(engines.constructed().getFirst()).takeInputs(node); assertTrue(node.getIsActive());
         }
@@ -411,8 +481,8 @@ class NodeManagerCyclesTest {
 
     @Test
     void inputFailureStopsTickingAndSuccessfulTicksUpdateMatchingOpenMenusOnly() {
-        Node node = f.node; when(node.getIsActive()).thenReturn(true, false); when(node.getTimeLeft()).thenReturn(10);
-        when(node.getCycleTime()).thenReturn(60); NodeManager.nodes.add(node); when(f.chunk.isForceLoaded()).thenReturn(true);
+        Node node = f.node; when(node.getIsActive()).thenReturn(true, true, false); when(node.getTimeLeft()).thenReturn(10);
+        when(node.getCycleTime()).thenReturn(60); NodeManager.nodes.add(node); when(f.world.isChunkForceLoaded(0, 0)).thenReturn(true);
         try (Cycles cycles = new Cycles()) {
             f.manager.start(); cycles.tasks.get(1200L).run(); verify(node).input(); verify(node, never()).tick();
             when(node.getIsActive()).thenReturn(true); when(node.getCycleTime()).thenReturn(1);

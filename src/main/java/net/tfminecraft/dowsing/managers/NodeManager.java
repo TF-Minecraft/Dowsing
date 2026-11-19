@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
@@ -16,6 +17,7 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Particle;
 import org.bukkit.Sound;
+import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
@@ -277,15 +279,15 @@ public class NodeManager implements Listener{
 			   {
 					if (!DowsingMain.plugin.nodesReady()) return;
 					validate();
+					try {
+						holdNodeChunks();
+					} catch(RuntimeException ex) {
+						DowsingMain.plugin.getLogger().log(java.util.logging.Level.SEVERE, "Failed to update node chunk loading", ex);
+					}
 					for(Node n : nodes) {
 						try {
-						if(!n.getIsActive()) continue;
-						if(!n.hasGuild()) continue;
-						// A held realm's nodes pause until it is taken on.
-						if(Node.held(n.getGuild())) continue;
-						if(n.getLoc().getChunk().isForceLoaded() == false) {
-							n.getLoc().getChunk().setForceLoaded(true);
-						}
+						// Switched-off and unowned nodes wait, and a held realm's nodes pause until it is taken on.
+						if(!producing(n)) continue;
 						if(n.getTimeLeft() <= 0) {
 							if(!new ItemDropper().dropItems(n)) continue;
 							n.setTimeLeft(n.getModifiedTime());
@@ -319,6 +321,60 @@ public class NodeManager implements Listener{
 			   }
 		}.runTaskTimer(DowsingMain.plugin, 0L, 1200L);
 	}
+	/** Whether a node produces this pass: switched on, owned, and not in a held realm. */
+	static boolean producing(Node n) {
+		if(!n.getIsActive() || !n.hasGuild()) return false;
+		return !Node.held(n.getGuild());
+	}
+
+	/** A world chunk that holds a node. */
+	record NodeChunk(World world, int x, int z) {
+		static NodeChunk of(Node n) {
+			Location loc = n.getLoc();
+			if(loc == null || loc.getWorld() == null) return null;
+			return new NodeChunk(loc.getWorld(), loc.getBlockX() >> 4, loc.getBlockZ() >> 4);
+		}
+		boolean forced() { return world.isChunkForceLoaded(x, z); }
+		void force(boolean on) { world.setChunkForceLoaded(x, z, on); }
+	}
+
+	/** The chunks the last pass kept loaded for producing nodes. */
+	private static final Set<NodeChunk> heldChunks = new HashSet<>();
+
+	/**
+	 * Keeps a producing node's chunk loaded, so it produces and its hopper runs with nobody near, and
+	 * lets go of the chunk once no node in it produces: switched off, unowned, in a held realm or removed.
+	 * A forced chunk never unloads and keeps every chunk a player loads within 13 chunks of it in memory
+	 * until the next restart, so an idle node's chunk must not stay forced. Waits for SimpleFactions,
+	 * which says who owns a node. The force flag is saved with the world, so after a restart the chunks
+	 * of the nodes that are idle by then are let go on the first pass.
+	 */
+	static void holdNodeChunks() {
+		if(!SimpleFactionsApi.ready()) return;
+		Set<NodeChunk> wanted = new HashSet<>();
+		Set<NodeChunk> idle = new HashSet<>(heldChunks);
+		for(Node n : nodes) {
+			NodeChunk chunk = NodeChunk.of(n);
+			if(chunk == null) continue;
+			if(producing(n)) wanted.add(chunk);
+			else idle.add(chunk);
+		}
+		idle.removeAll(wanted);
+		for(NodeChunk chunk : wanted) {
+			if(!chunk.forced()) chunk.force(true);
+		}
+		for(NodeChunk chunk : idle) {
+			if(chunk.forced()) chunk.force(false);
+		}
+		heldChunks.clear();
+		heldChunks.addAll(wanted);
+	}
+
+	/** Forgets the chunks held this uptime, for tests. */
+	static void forgetHeldChunks() {
+		heldChunks.clear();
+	}
+
 	/** Every 30 s: resync node benefits when a node's guild or realm changed without a node event. */
 	public void realmCycle(){
 		new BukkitRunnable()

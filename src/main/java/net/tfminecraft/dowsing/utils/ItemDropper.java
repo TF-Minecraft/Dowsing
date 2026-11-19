@@ -93,7 +93,11 @@ public class ItemDropper {
 		Location loc = n.getLoc().clone().add(0.5, 2, 0.5);
 		Block above = n.getLoc().clone().add(0, 1, 0).getBlock();
 		if(above != null && above.getType() == Material.HOPPER && above.getState() instanceof Hopper hopper) {
-			int spilled = deliverToHopper(hopper.getInventory(), items, result, loc);
+			// Filled through the snapshot and written back, which marks the chunk changed. Filling the
+			// live inventory did not, so output the hopper could not pass on was gone after the chunk
+			// unloaded or the server restarted.
+			int spilled = deliverToHopper(hopper.getSnapshotInventory(), items, result, loc);
+			hopper.update(false, false);
 			if(spilled > 0) warnSpill(n, above, spilled);
 		} else {
 			for(Map.Entry<String, Integer> entry : result.entrySet()) {

@@ -165,6 +165,8 @@ class ItemDropperTest {
 		assertTrue(new ItemDropper(path -> template, message -> fail(message)).dropItems(node));
 		verify(delivered).setAmount(3);
 		verify(inventory).addItem(delivered);
+		// Written back through the snapshot so the chunk is saved with the output in it.
+		verify(lastHopper).update(false, false); verify(lastHopper, never()).getInventory();
 		verify(world, never()).dropItem(any(Location.class), any(ItemStack.class));
 		verify(world).playSound(new Location(world, 4.5, 62, 7.5), Sound.ENTITY_ITEM_PICKUP, 0.5f, 1f);
 		verify(node).setLastResult(Map.of("v.STONE", 3)); verify(node).update();
@@ -289,6 +291,8 @@ class ItemDropperTest {
 		verify(node).setPendingResult(null); verify(node).setLastResult(Map.of("v.STONE", 130));
 	}
 
+	private Hopper lastHopper;
+
 	private Inventory hopperAbove(World world) {
 		Block block = mock(Block.class);
 		Hopper hopper = mock(Hopper.class);
@@ -297,7 +301,9 @@ class ItemDropperTest {
 		when(block.getType()).thenReturn(Material.HOPPER);
 		when(block.getState()).thenReturn(hopper);
 		when(block.getX()).thenReturn(4); when(block.getY()).thenReturn(61); when(block.getZ()).thenReturn(7);
-		when(hopper.getInventory()).thenReturn(inventory);
+		when(hopper.getSnapshotInventory()).thenReturn(inventory);
+		when(hopper.update(false, false)).thenReturn(true);
+		lastHopper = hopper;
 		return inventory;
 	}
 
