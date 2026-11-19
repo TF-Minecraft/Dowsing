@@ -247,14 +247,50 @@ class NodeManagerCyclesTest {
     }
 
     @Test
-    void aFailureOutsideOneChunkIsLoggedAndThePassGoesOn() {
-        Node node = f.node; when(node.hasGuild()).thenThrow(new IllegalStateException("guild lookup failed"));
-        when(node.getIsActive()).thenReturn(true); NodeManager.nodes.add(node);
+    void aNodeThatCannotBeCheckedKeepsItsChunkAndTheOthersGoOn() {
+        Node broken = f.nodeAt(f.location), other = f.nodeAt(new Location(f.world, 40, 64, -20));
+        when(broken.getIsActive()).thenReturn(true); NodeManager.nodes.add(broken);
+        NodeManager.holdNodeChunks();
+        verify(f.world).setChunkForceLoaded(0, 0, true);
+        when(f.world.isChunkForceLoaded(0, 0)).thenReturn(true);
+        when(broken.hasGuild()).thenThrow(new IllegalStateException("guild lookup failed"));
+        when(other.getIsActive()).thenReturn(true); NodeManager.nodes.add(other);
         try (Cycles cycles = new Cycles()) {
             f.manager.start(); cycles.tasks.get(1200L).run();
-            verify(f.logger).log(eq(java.util.logging.Level.SEVERE), contains("Failed to update node chunk loading"), any(IllegalStateException.class));
-            verify(f.logger).log(eq(java.util.logging.Level.SEVERE), contains("Failed to process node"), any(IllegalStateException.class));
+            verify(f.logger).log(eq(java.util.logging.Level.SEVERE), contains("for chunk loading"), any(IllegalStateException.class));
+            verify(f.world).setChunkForceLoaded(2, -2, true);
+            verify(f.world, never()).setChunkForceLoaded(0, 0, false);
         }
+        // A node whose location cannot be read is skipped and logged.
+        Node lost = f.nodeAt(f.location); when(lost.getLoc()).thenThrow(new IllegalStateException("no location")); NodeManager.nodes.add(lost);
+        NodeManager.holdNodeChunks(); NodeManager.nodes.remove(lost);
+        verify(f.logger).log(eq(java.util.logging.Level.SEVERE), contains("Failed to find node"), any(IllegalStateException.class));
+        // Still tracked: once it can be checked again and is idle, it is let go.
+        doReturn(true).when(broken).hasGuild(); when(broken.getIsActive()).thenReturn(false);
+        NodeManager.holdNodeChunks();
+        verify(f.world).setChunkForceLoaded(0, 0, false);
+    }
+
+    @Test
+    void aHeldChunkWhoseCheckFailsStaysTrackedAndIsLetGoLater() {
+        Node node = f.node; when(node.getIsActive()).thenReturn(true); NodeManager.nodes.add(node);
+        NodeManager.holdNodeChunks();
+        when(f.world.isChunkForceLoaded(0, 0)).thenThrow(new IllegalStateException("bad chunk"));
+        NodeManager.holdNodeChunks();
+        doReturn(true).when(f.world).isChunkForceLoaded(0, 0); when(node.getIsActive()).thenReturn(false);
+        NodeManager.holdNodeChunks();
+        verify(f.world).setChunkForceLoaded(0, 0, false);
+    }
+
+    @Test
+    void aFailedReleaseOfABrokenNodesChunkIsRetriedByTheNextPass() {
+        Node node = f.node; when(node.getIsActive()).thenReturn(true); NodeManager.nodes.add(node);
+        NodeManager.holdNodeChunks();
+        when(f.world.isChunkForceLoaded(0, 0)).thenThrow(new IllegalStateException("bad chunk"));
+        NodeManager.releaseChunkOf(node); NodeManager.nodes.remove(node);
+        doReturn(true).when(f.world).isChunkForceLoaded(0, 0);
+        NodeManager.holdNodeChunks();
+        verify(f.world).setChunkForceLoaded(0, 0, false);
     }
 
     @Test

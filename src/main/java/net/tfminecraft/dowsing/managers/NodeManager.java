@@ -279,11 +279,8 @@ public class NodeManager implements Listener{
 			   {
 					if (!DowsingMain.plugin.nodesReady()) return;
 					validate();
-					try {
-						holdNodeChunks();
-					} catch(RuntimeException ex) {
-						DowsingMain.plugin.getLogger().log(java.util.logging.Level.SEVERE, "Failed to update node chunk loading", ex);
-					}
+					// Failures are handled per node and per chunk inside, so production below always runs.
+					holdNodeChunks();
 					for(Node n : nodes) {
 						try {
 						// Switched-off and unowned nodes wait, and a held realm's nodes pause until it is taken on.
@@ -360,26 +357,47 @@ public class NodeManager implements Listener{
 	static void holdNodeChunks() {
 		if(!SimpleFactionsApi.ready()) return;
 		Set<NodeChunk> wanted = new HashSet<>();
+		Set<NodeChunk> unknown = new HashSet<>();
 		Set<NodeChunk> idle = new HashSet<>(heldChunks);
 		for(Node n : nodes) {
-			NodeChunk chunk = NodeChunk.of(n);
+			NodeChunk chunk;
+			try {
+				chunk = NodeChunk.of(n);
+			} catch(RuntimeException ex) {
+				logChunkFailure("Failed to find node " + n.getId() + "'s chunk", ex);
+				continue;
+			}
 			if(chunk == null) continue;
-			if(producing(n)) wanted.add(chunk);
-			else if(!startCleared) idle.add(chunk);
+			try {
+				if(producing(n)) wanted.add(chunk);
+				else if(!startCleared) idle.add(chunk);
+			} catch(RuntimeException ex) {
+				// Not known whether it produces: its chunk keeps what it had and is not let go.
+				logChunkFailure("Failed to check node " + n.getId() + " for chunk loading", ex);
+				unknown.add(chunk);
+			}
 		}
 		idle.removeAll(wanted);
-		Set<NodeChunk> failed = new HashSet<>();
+		idle.removeAll(unknown);
+		Set<NodeChunk> next = new HashSet<>();
 		for(NodeChunk chunk : wanted) {
-			if(!setForced(chunk, true)) failed.add(chunk);
+			// A held chunk that could not be checked stays held, so it is still let go once idle.
+			if(setForced(chunk, true) || heldChunks.contains(chunk)) next.add(chunk);
 		}
 		for(NodeChunk chunk : idle) {
-			// Kept in the set when it could not be let go, so the next pass tries again.
-			if(!setForced(chunk, false)) wanted.add(chunk);
+			// Kept when it could not be let go, so the next pass tries again.
+			if(!setForced(chunk, false)) next.add(chunk);
 		}
-		wanted.removeAll(failed);
+		for(NodeChunk chunk : unknown) {
+			if(heldChunks.contains(chunk)) next.add(chunk);
+		}
 		heldChunks.clear();
-		heldChunks.addAll(wanted);
+		heldChunks.addAll(next);
 		startCleared = true;
+	}
+
+	private static void logChunkFailure(String message, RuntimeException ex) {
+		DowsingMain.plugin.getLogger().log(java.util.logging.Level.SEVERE, message, ex);
 	}
 
 	/** Sets one chunk's force flag; a failing chunk is logged and does not stop the others. */
@@ -406,7 +424,10 @@ public class NodeManager implements Listener{
 		}
 		// Only a chunk Dowsing holds, or any node chunk before the first pass has cleared them; a staff
 		// force-load made later on an idle node's chunk is left alone.
-		if(heldChunks.remove(chunk) || !startCleared) setForced(chunk, false);
+		if(!heldChunks.contains(chunk) && startCleared) return;
+		// Tracked until it is let go, so a failed release is tried again by the next pass.
+		if(setForced(chunk, false)) heldChunks.remove(chunk);
+		else heldChunks.add(chunk);
 	}
 
 	/** Forgets what this start held and cleared, for tests. */
