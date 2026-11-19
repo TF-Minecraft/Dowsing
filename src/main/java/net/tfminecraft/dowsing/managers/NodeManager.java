@@ -359,12 +359,14 @@ public class NodeManager implements Listener{
 		Set<NodeChunk> wanted = new HashSet<>();
 		Set<NodeChunk> unknown = new HashSet<>();
 		Set<NodeChunk> idle = new HashSet<>(heldChunks);
+		boolean lookupFailed = false;
 		for(Node n : nodes) {
 			NodeChunk chunk;
 			try {
 				chunk = NodeChunk.of(n);
 			} catch(RuntimeException ex) {
 				logChunkFailure("Failed to find node " + n.getId() + "'s chunk", ex);
+				lookupFailed = true;
 				continue;
 			}
 			if(chunk == null) continue;
@@ -380,16 +382,25 @@ public class NodeManager implements Listener{
 		idle.removeAll(wanted);
 		idle.removeAll(unknown);
 		Set<NodeChunk> next = new HashSet<>();
+		if(lookupFailed) {
+			// A node whose chunk is unknown may be in any held chunk: none is let go this pass.
+			for(NodeChunk chunk : heldChunks) {
+				if(idle.remove(chunk)) next.add(chunk);
+			}
+		}
+		// On the first pass a chunk that could not be handled is tracked anyway, so a later pass can still
+		// let go of a flag an earlier start left on it.
+		boolean keepAll = !startCleared;
 		for(NodeChunk chunk : wanted) {
 			// A held chunk that could not be checked stays held, so it is still let go once idle.
-			if(setForced(chunk, true) || heldChunks.contains(chunk)) next.add(chunk);
+			if(setForced(chunk, true) || keepAll || heldChunks.contains(chunk)) next.add(chunk);
 		}
 		for(NodeChunk chunk : idle) {
 			// Kept when it could not be let go, so the next pass tries again.
 			if(!setForced(chunk, false)) next.add(chunk);
 		}
 		for(NodeChunk chunk : unknown) {
-			if(heldChunks.contains(chunk)) next.add(chunk);
+			if(keepAll || heldChunks.contains(chunk)) next.add(chunk);
 		}
 		heldChunks.clear();
 		heldChunks.addAll(next);
@@ -493,13 +504,18 @@ public class NodeManager implements Listener{
 		if (!SimpleFactionsApi.ready()) return;
 		for(int i = 0; i<nodes.size();i++) {
 			Node n = nodes.get(i);
-			// Reading a block in an unloaded chunk loads it on the main thread. Nobody can break a node
-			// whose chunk is not loaded, so it is checked when its chunk is next loaded.
-			NodeChunk chunk = NodeChunk.of(n);
-			if(chunk == null || !chunk.loaded()) continue;
-			if(!n.getLoc().getBlock().getType().equals(Material.BARRIER)) {
-				n.breakNode();
-				nodes.remove(i--);
+			try {
+				// Reading a block in an unloaded chunk loads it on the main thread. Nobody can break a node
+				// whose chunk is not loaded, so it is checked when its chunk is next loaded.
+				NodeChunk chunk = NodeChunk.of(n);
+				if(chunk == null || !chunk.loaded()) continue;
+				if(!n.getLoc().getBlock().getType().equals(Material.BARRIER)) {
+					n.breakNode();
+					nodes.remove(i--);
+				}
+			} catch(RuntimeException ex) {
+				// One node that cannot be checked does not stop the others or the pass.
+				logChunkFailure("Failed to validate node " + n.getId(), ex);
 			}
 		}
 	}

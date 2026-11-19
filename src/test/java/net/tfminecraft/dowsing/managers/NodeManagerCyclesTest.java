@@ -272,6 +272,43 @@ class NodeManagerCyclesTest {
     }
 
     @Test
+    void aFirstPassFailureStillLetsALaterPassClearAnOldFlag() {
+        Node node = f.node; when(node.getIsActive()).thenReturn(true); NodeManager.nodes.add(node);
+        when(f.world.isChunkForceLoaded(0, 0)).thenReturn(true);
+        when(node.hasGuild()).thenThrow(new IllegalStateException("guild lookup failed"));
+        NodeManager.holdNodeChunks();
+        verify(f.world, never()).setChunkForceLoaded(0, 0, false);
+        doReturn(true).when(node).hasGuild(); when(node.getIsActive()).thenReturn(false);
+        NodeManager.holdNodeChunks();
+        verify(f.world).setChunkForceLoaded(0, 0, false);
+    }
+
+    @Test
+    void noHeldChunkIsLetGoInAPassWhereANodesLocationCannotBeRead() {
+        Node node = f.node; when(node.getIsActive()).thenReturn(true); NodeManager.nodes.add(node);
+        NodeManager.holdNodeChunks();
+        when(f.world.isChunkForceLoaded(0, 0)).thenReturn(true);
+        when(node.getLoc()).thenThrow(new IllegalStateException("no location"));
+        NodeManager.holdNodeChunks();
+        verify(f.world, never()).setChunkForceLoaded(0, 0, false);
+        // Still tracked: once the location reads again and the node is idle, it is let go.
+        doReturn(f.location).when(node).getLoc(); when(node.getIsActive()).thenReturn(false);
+        NodeManager.holdNodeChunks();
+        verify(f.world).setChunkForceLoaded(0, 0, false);
+    }
+
+    @Test
+    void aNodeThatFailsValidationDoesNotStopTheOthers() {
+        Node lost = f.nodeAt(f.location), invalid = f.nodeAt(f.location);
+        when(lost.getLoc()).thenThrow(new IllegalStateException("no location"));
+        NodeManager.nodes.addAll(List.of(lost, invalid));
+        when(f.worldBlock.getType()).thenReturn(Material.AIR);
+        f.manager.validate();
+        verify(invalid).breakNode(); assertFalse(NodeManager.nodes.contains(invalid)); assertTrue(NodeManager.nodes.contains(lost));
+        verify(f.logger).log(eq(java.util.logging.Level.SEVERE), contains("Failed to validate node"), any(IllegalStateException.class));
+    }
+
+    @Test
     void aHeldChunkWhoseCheckFailsStaysTrackedAndIsLetGoLater() {
         Node node = f.node; when(node.getIsActive()).thenReturn(true); NodeManager.nodes.add(node);
         NodeManager.holdNodeChunks();
