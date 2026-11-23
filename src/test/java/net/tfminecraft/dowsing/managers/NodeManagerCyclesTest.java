@@ -635,7 +635,7 @@ class NodeManagerCyclesTest {
 
     @Test
     void inputFailureStopsTickingAndSuccessfulTicksUpdateMatchingOpenMenusOnly() {
-        Node node = f.node; when(node.getIsActive()).thenReturn(true, true, false); when(node.getTimeLeft()).thenReturn(10);
+        Node node = f.node; when(node.getIsActive()).thenReturn(true, true, true, false); when(node.getTimeLeft()).thenReturn(10);
         when(node.getCycleTime()).thenReturn(60); NodeManager.nodes.add(node);
         try (Cycles cycles = new Cycles()) {
             f.manager.start(); cycles.tasks.get(1200L).run(); verify(node).input(); verify(node, never()).tick();
@@ -656,6 +656,7 @@ class NodeManagerCyclesTest {
 
     @Test
     void timedChunksAreHeldOnlyAroundDropsAndInputs() {
+        NodeManager.holdNodeChunks(); // the start's first pass, before this node exists
         Node node = f.node; when(node.getIsActive()).thenReturn(true); NodeManager.nodes.add(node);
         Cache.cycleLength = 60; Cache.nodeChunkLeadMinutes = 1; Cache.nodeChunkInputLeadMinutes = 5;
         when(node.getTimeLeft()).thenReturn(100); when(node.getCycleTime()).thenReturn(10);
@@ -681,6 +682,24 @@ class NodeManagerCyclesTest {
         Cache.timedNodeChunks = false;
         assertTrue(NodeManager.needsChunkNow(node));
         NodeManager.startDrain(node); Cache.timedNodeChunks = true;
+        assertFalse(NodeManager.needsChunkNow(node));
+    }
+
+    @Test
+    void theFirstPassAfterAStartGivesEveryProducingNodeADrainWindow() {
+        Node node = f.node; when(node.getIsActive()).thenReturn(true);
+        Node broken = f.nodeAt(new Location(f.world, 40, 64, -20)); when(broken.getIsActive()).thenThrow(new IllegalStateException("broken"));
+        NodeManager.nodes.addAll(List.of(node, broken));
+        Cache.cycleLength = 60; Cache.nodeChunkDrainMinutes = 1;
+        when(node.getTimeLeft()).thenReturn(100); when(node.getCycleTime()).thenReturn(10);
+        // Not due, but a restart may have left output in its hopper: held for one drain window.
+        NodeManager.holdNodeChunks();
+        verify(f.world).setChunkForceLoaded(0, 0, true);
+        // The window ends with an empty hopper: let go, and later passes give no new window.
+        when(f.world.isChunkForceLoaded(0, 0)).thenReturn(true);
+        doReturn(true).when(broken).getIsActive(); when(broken.hasGuild()).thenReturn(false);
+        NodeManager.holdNodeChunks();
+        verify(f.world).setChunkForceLoaded(0, 0, false);
         assertFalse(NodeManager.needsChunkNow(node));
     }
 
@@ -723,6 +742,7 @@ class NodeManagerCyclesTest {
 
     @Test
     void aChunkThatIsNotLoadedYetLoadsInTheBackgroundAndIsHeldOnlyIfStillNeeded() {
+        NodeManager.holdNodeChunks();
         Node node = f.node; when(node.getIsActive()).thenReturn(true); NodeManager.nodes.add(node);
         Cache.cycleLength = 60; when(node.getTimeLeft()).thenReturn(1); when(node.getCycleTime()).thenReturn(10);
         when(f.world.isChunkLoaded(0, 0)).thenReturn(false);
@@ -756,6 +776,7 @@ class NodeManagerCyclesTest {
 
     @Test
     void aBackgroundLoadForARemovedNodeOrAFailingChunkCheckHoldsNothing() {
+        NodeManager.holdNodeChunks();
         Node node = f.node; when(node.getIsActive()).thenReturn(true); NodeManager.nodes.add(node);
         Cache.cycleLength = 60; when(node.getTimeLeft()).thenReturn(1); when(node.getCycleTime()).thenReturn(10);
         when(f.world.isChunkLoaded(0, 0)).thenReturn(false);

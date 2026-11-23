@@ -363,6 +363,17 @@ public class NodeManager implements Listener{
 	static void holdNodeChunks() {
 		if(!SimpleFactionsApi.ready()) return;
 		advanceDrains();
+		if(!startCleared) {
+			// Drain windows do not survive a restart: every producing node gets one on the first pass, so
+			// output a restart left in its hopper is still moved (and the window extends while it is not).
+			for(Node n : nodes) {
+				try {
+					if(producing(n)) startDrain(n);
+				} catch(RuntimeException ex) {
+					// Handled like any node that cannot be checked, in the loop below.
+				}
+			}
+		}
 		Set<NodeChunk> wanted = new HashSet<>();
 		Set<NodeChunk> soon = new HashSet<>();
 		Set<NodeChunk> unknown = new HashSet<>();
