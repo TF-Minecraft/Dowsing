@@ -109,6 +109,21 @@ class DowsingLoadersTest {
         assertEquals(0.6, Cache.refundPercentage); assertEquals(4, Cache.minMembersForNode);
         assertEquals(0.2, Cache.efficiencyGrowthPerMember); assertEquals(30, Cache.maxEfficiencyPerMember);
         assertEquals(25, Cache.efficiencyLossType); assertEquals(3, Cache.efficiencyLossPM);
+        assertTrue(Cache.timedNodeChunks); assertEquals(1, Cache.nodeChunkLeadMinutes);
+        assertEquals(5, Cache.nodeChunkInputLeadMinutes); assertEquals(5, Cache.nodeChunkDrainMinutes);
+        assertEquals(3, Cache.nodeChunkMaxExtensions); assertTrue(Cache.keepActiveChunks.isEmpty());
+        new ConfigLoader().loadConfig(file("chunks.yml", """
+                node-chunks:
+                  mode: ALWAYS
+                  lead-minutes: -2
+                  input-lead-minutes: 8
+                  drain-minutes: 0
+                  max-drain-extensions: -1
+                  keep-active: ["TFMC_Map 6000 6000"]
+                """));
+        assertFalse(Cache.timedNodeChunks); assertEquals(0, Cache.nodeChunkLeadMinutes);
+        assertEquals(8, Cache.nodeChunkInputLeadMinutes); assertEquals(1, Cache.nodeChunkDrainMinutes);
+        assertEquals(0, Cache.nodeChunkMaxExtensions); assertEquals(List.of("TFMC_Map 6000 6000"), Cache.keepActiveChunks);
     }
 
     @Test
