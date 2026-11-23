@@ -13,3 +13,20 @@ efficiency-growth-per-member: 0.1
 max-efficiency-per-member: 25.0
 efficiency-loss-type: 40.0
 efficiency-loss-pm: 0.0
+
+# How a producing node's chunk is kept loaded.
+#   timed:  only around its drops and inputs. It loads in the background lead-minutes before a drop
+#           (input-lead-minutes before an input, so hoppers can fill the barrel), and stays drain-minutes
+#           after, extended up to max-drain-extensions times while the node's hopper still holds items.
+#   always: every producing node's chunk stays loaded (Dowsing 3.4 behaviour). A loaded chunk keeps every
+#           chunk a player loads within 13 chunks of it in memory until the restart.
+node-chunks:
+  mode: timed
+  lead-minutes: 1
+  input-lead-minutes: 5
+  drain-minutes: 5
+  max-drain-extensions: 3
+  # Chunks kept force-loaded all the time, "world x z" in block coordinates, so the world keeps ticking
+  # while nobody is online (pick a spot no player goes). After removing an entry, unload it with
+  # /forceload remove.
+  keep-active: []

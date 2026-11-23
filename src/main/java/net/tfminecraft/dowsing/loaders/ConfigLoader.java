@@ -48,5 +48,12 @@ public class ConfigLoader {
 		Cache.maxEfficiencyPerMember = config.getDouble("max-efficiency-per-member", 25.0);
 		Cache.efficiencyLossType = config.getDouble("efficiency-loss-type", 40.0);
 		Cache.efficiencyLossPM = config.getDouble("efficiency-loss-pm", 5.0);
+
+		Cache.timedNodeChunks = !"always".equalsIgnoreCase(config.getString("node-chunks.mode", "timed"));
+		Cache.nodeChunkLeadMinutes = Math.max(0, config.getInt("node-chunks.lead-minutes", 1));
+		Cache.nodeChunkInputLeadMinutes = Math.max(0, config.getInt("node-chunks.input-lead-minutes", 5));
+		Cache.nodeChunkDrainMinutes = Math.max(1, config.getInt("node-chunks.drain-minutes", 5));
+		Cache.nodeChunkMaxExtensions = Math.max(0, config.getInt("node-chunks.max-drain-extensions", 3));
+		Cache.keepActiveChunks = java.util.List.copyOf(config.getStringList("node-chunks.keep-active"));
 	}
 }

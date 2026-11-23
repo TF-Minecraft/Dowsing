@@ -236,6 +236,7 @@ class NodeManagerCyclesTest {
 
     @Test
     void aChunkLoadingFailureIsLoggedAndNodesStillProduce() {
+        Cache.timedNodeChunks = false;
         Node node = f.node; when(node.getIsActive()).thenReturn(true); when(node.getTimeLeft()).thenReturn(10); when(node.getCycleTime()).thenReturn(1);
         NodeManager.nodes.add(node);
         when(f.world.isChunkForceLoaded(0, 0)).thenThrow(new IllegalStateException("world gone"));
@@ -565,6 +566,8 @@ class NodeManagerCyclesTest {
             verify(f.world).setChunkForceLoaded(0, 0, true); verify(droppers.constructed().getFirst()).dropItems(node);
             assertEquals(29, node.getTimeLeft()); assertEquals(0, node.getCycleTime()); assertEquals(1, node.getInputCounter());
             verify(engines.constructed().getFirst()).takeInputs(node); assertTrue(node.getIsActive());
+            // Neither a drop nor an input is due now; the chunk stays held only for the drain time after them.
+            assertTrue(NodeManager.needsChunkNow(node));
         }
     }
 
@@ -632,7 +635,7 @@ class NodeManagerCyclesTest {
 
     @Test
     void inputFailureStopsTickingAndSuccessfulTicksUpdateMatchingOpenMenusOnly() {
-        Node node = f.node; when(node.getIsActive()).thenReturn(true, true, false); when(node.getTimeLeft()).thenReturn(10);
+        Node node = f.node; when(node.getIsActive()).thenReturn(true, true, true, false); when(node.getTimeLeft()).thenReturn(10);
         when(node.getCycleTime()).thenReturn(60); NodeManager.nodes.add(node);
         try (Cycles cycles = new Cycles()) {
             f.manager.start(); cycles.tasks.get(1200L).run(); verify(node).input(); verify(node, never()).tick();
@@ -651,6 +654,163 @@ class NodeManagerCyclesTest {
         }
     }
 
+    @Test
+    void timedChunksAreHeldOnlyAroundDropsAndInputs() {
+        NodeManager.holdNodeChunks(); // the start's first pass, before this node exists
+        Node node = f.node; when(node.getIsActive()).thenReturn(true); NodeManager.nodes.add(node);
+        Cache.cycleLength = 60; Cache.nodeChunkLeadMinutes = 1; Cache.nodeChunkInputLeadMinutes = 5;
+        when(node.getTimeLeft()).thenReturn(100); when(node.getCycleTime()).thenReturn(10);
+        NodeManager.holdNodeChunks();
+        verify(f.world, never()).setChunkForceLoaded(0, 0, true);
+        // A drop next pass: held now (already loaded, so no background load is needed).
+        when(node.getTimeLeft()).thenReturn(1);
+        NodeManager.holdNodeChunks();
+        verify(f.world).setChunkForceLoaded(0, 0, true);
+        // Nothing due for a while: let go.
+        when(f.world.isChunkForceLoaded(0, 0)).thenReturn(true); when(node.getTimeLeft()).thenReturn(50);
+        NodeManager.holdNodeChunks();
+        verify(f.world).setChunkForceLoaded(0, 0, false);
+        // An input within the input lead time, and one due this pass.
+        when(f.world.isChunkForceLoaded(0, 0)).thenReturn(false); when(node.getCycleTime()).thenReturn(54);
+        NodeManager.holdNodeChunks();
+        verify(f.world, times(2)).setChunkForceLoaded(0, 0, true);
+        when(node.getCycleTime()).thenReturn(59);
+        assertTrue(NodeManager.needsChunkNow(node));
+        Cache.cycleLength = null;
+        assertFalse(NodeManager.needsChunkNow(node)); assertFalse(NodeManager.needsChunkSoon(node));
+        // "always" keeps a producing node's chunk the whole time.
+        Cache.timedNodeChunks = false;
+        assertTrue(NodeManager.needsChunkNow(node));
+        NodeManager.startDrain(node); Cache.timedNodeChunks = true;
+        assertFalse(NodeManager.needsChunkNow(node));
+    }
+
+    @Test
+    void theFirstPassAfterAStartGivesEveryProducingNodeADrainWindow() {
+        Node node = f.node; when(node.getIsActive()).thenReturn(true);
+        Node broken = f.nodeAt(new Location(f.world, 40, 64, -20)); when(broken.getIsActive()).thenThrow(new IllegalStateException("broken"));
+        NodeManager.nodes.addAll(List.of(node, broken));
+        Cache.cycleLength = 60; Cache.nodeChunkDrainMinutes = 1;
+        when(node.getTimeLeft()).thenReturn(100); when(node.getCycleTime()).thenReturn(10);
+        // Not due, but a restart may have left output in its hopper: held for one drain window.
+        NodeManager.holdNodeChunks();
+        verify(f.world).setChunkForceLoaded(0, 0, true);
+        // The window ends with an empty hopper: let go, and later passes give no new window.
+        when(f.world.isChunkForceLoaded(0, 0)).thenReturn(true);
+        doReturn(true).when(broken).getIsActive(); when(broken.hasGuild()).thenReturn(false);
+        NodeManager.holdNodeChunks();
+        verify(f.world).setChunkForceLoaded(0, 0, false);
+        assertFalse(NodeManager.needsChunkNow(node));
+    }
+
+    @Test
+    void aDrainKeepsTheChunkAndIsExtendedWhileTheHopperHoldsItems() {
+        Node node = f.nodeAt(f.location); when(node.getIsActive()).thenReturn(true); NodeManager.nodes.add(node);
+        Cache.cycleLength = 60; Cache.nodeChunkDrainMinutes = 2; Cache.nodeChunkMaxExtensions = 1;
+        when(node.getTimeLeft()).thenReturn(100); when(node.getCycleTime()).thenReturn(10);
+        NodeManager.startDrain(node);
+        assertTrue(NodeManager.needsChunkNow(node));
+        NodeManager.advanceDrains();
+        assertTrue(NodeManager.needsChunkNow(node));
+        // Out of time with an empty hopper (no hopper block at all): the drain ends.
+        NodeManager.advanceDrains();
+        assertFalse(NodeManager.needsChunkNow(node));
+        // A hopper that still holds items extends it once, then it ends.
+        org.bukkit.block.Hopper hopper = mock(org.bukkit.block.Hopper.class);
+        org.bukkit.inventory.Inventory held = mock(org.bukkit.inventory.Inventory.class);
+        when(hopper.getInventory()).thenReturn(held); when(held.isEmpty()).thenReturn(false);
+        when(f.worldBlock.getType()).thenReturn(Material.HOPPER); when(f.worldBlock.getState(false)).thenReturn(hopper);
+        NodeManager.startDrain(node);
+        NodeManager.advanceDrains(); NodeManager.advanceDrains();
+        assertTrue(NodeManager.needsChunkNow(node));
+        NodeManager.advanceDrains(); NodeManager.advanceDrains();
+        assertFalse(NodeManager.needsChunkNow(node));
+        // An unloaded chunk or a failing check counts as an empty hopper.
+        when(f.world.isChunkLoaded(0, 0)).thenReturn(false);
+        assertFalse(NodeManager.hopperHoldsItems(node));
+        when(f.world.isChunkLoaded(0, 0)).thenReturn(true);
+        assertTrue(NodeManager.hopperHoldsItems(node));
+        when(f.worldBlock.getState(false)).thenThrow(new IllegalStateException("no state"));
+        assertFalse(NodeManager.hopperHoldsItems(node));
+        verify(f.logger).log(eq(java.util.logging.Level.SEVERE), contains("hopper"), any(IllegalStateException.class));
+        assertFalse(NodeManager.hopperHoldsItems(f.nodeAt(new Location(null, 1, 2, 3))));
+        // A removed node's drain is forgotten.
+        NodeManager.startDrain(node); NodeManager.nodes.remove(node);
+        NodeManager.advanceDrains(); NodeManager.nodes.add(node);
+        assertFalse(NodeManager.needsChunkNow(node));
+    }
+
+    @Test
+    void aChunkThatIsNotLoadedYetLoadsInTheBackgroundAndIsHeldOnlyIfStillNeeded() {
+        NodeManager.holdNodeChunks();
+        Node node = f.node; when(node.getIsActive()).thenReturn(true); NodeManager.nodes.add(node);
+        Cache.cycleLength = 60; when(node.getTimeLeft()).thenReturn(1); when(node.getCycleTime()).thenReturn(10);
+        when(f.world.isChunkLoaded(0, 0)).thenReturn(false);
+        java.util.concurrent.CompletableFuture<org.bukkit.Chunk> load = new java.util.concurrent.CompletableFuture<>();
+        when(f.world.getChunkAtAsync(0, 0)).thenReturn(load);
+        try (Cycles cycles = new Cycles()) {
+            NodeManager.holdNodeChunks(); NodeManager.holdNodeChunks();
+            verify(f.world, times(1)).getChunkAtAsync(0, 0);
+            verify(f.world, never()).setChunkForceLoaded(0, 0, true);
+            load.complete(f.chunk);
+            verify(f.world).setChunkForceLoaded(0, 0, true);
+            // Finished after the node stopped needing it: not held.
+            java.util.concurrent.CompletableFuture<org.bukkit.Chunk> late = new java.util.concurrent.CompletableFuture<>();
+            when(f.world.getChunkAtAsync(0, 0)).thenReturn(late);
+            NodeManager.holdNodeChunks();
+            when(node.getTimeLeft()).thenReturn(50);
+            NodeManager.holdNodeChunks();
+            late.complete(f.chunk);
+            verify(f.world, times(1)).setChunkForceLoaded(0, 0, true);
+            // A failed load is logged, and so is one that cannot even start.
+            when(node.getTimeLeft()).thenReturn(1);
+            java.util.concurrent.CompletableFuture<org.bukkit.Chunk> failed = new java.util.concurrent.CompletableFuture<>();
+            when(f.world.getChunkAtAsync(0, 0)).thenReturn(failed);
+            NodeManager.holdNodeChunks();
+            failed.completeExceptionally(new IllegalStateException("disk"));
+            when(f.world.getChunkAtAsync(0, 0)).thenThrow(new IllegalStateException("closed"));
+            NodeManager.holdNodeChunks();
+            verify(f.logger, times(2)).log(eq(java.util.logging.Level.SEVERE), contains("Failed to load node chunk 0, 0"), any(IllegalStateException.class));
+        }
+    }
+
+    @Test
+    void aBackgroundLoadForARemovedNodeOrAFailingChunkCheckHoldsNothing() {
+        NodeManager.holdNodeChunks();
+        Node node = f.node; when(node.getIsActive()).thenReturn(true); NodeManager.nodes.add(node);
+        Cache.cycleLength = 60; when(node.getTimeLeft()).thenReturn(1); when(node.getCycleTime()).thenReturn(10);
+        when(f.world.isChunkLoaded(0, 0)).thenReturn(false);
+        java.util.concurrent.CompletableFuture<org.bukkit.Chunk> load = new java.util.concurrent.CompletableFuture<>();
+        when(f.world.getChunkAtAsync(0, 0)).thenReturn(load);
+        try (Cycles cycles = new Cycles()) {
+            NodeManager.holdNodeChunks();
+            // The node breaks before the load finishes: its chunk was let go, so the late load holds nothing.
+            NodeManager.nodes.remove(node); NodeManager.releaseChunkOf(node);
+            load.complete(f.chunk);
+            verify(f.world, never()).setChunkForceLoaded(0, 0, true);
+            // A chunk whose loaded state cannot be read is logged; the pass goes on and still produces.
+            NodeManager.nodes.add(node);
+            when(f.world.isChunkLoaded(0, 0)).thenThrow(new IllegalStateException("world gone"));
+            NodeManager.holdNodeChunks();
+            verify(f.logger).log(eq(java.util.logging.Level.SEVERE), contains("Failed to load node chunk 0, 0"), any(IllegalStateException.class));
+        }
+    }
+
+    @Test
+    void keepActiveChunksStayForcedAndBadEntriesAreSkipped() {
+        Cache.keepActiveChunks = List.of("TFMC_Map 100 -40", "bad", "TFMC_Map x 3", "nowhere 1 2");
+        try (Cycles cycles = new Cycles()) {
+            cycles.bukkit.when(() -> Bukkit.getWorld("TFMC_Map")).thenReturn(f.world);
+            cycles.bukkit.when(() -> Bukkit.getWorld("nowhere")).thenReturn(null);
+            NodeManager.holdNodeChunks();
+            verify(f.world).setChunkForceLoaded(6, -3, true);
+            when(f.world.isChunkForceLoaded(6, -3)).thenReturn(true);
+            Cache.keepActiveChunks = List.of();
+            NodeManager.holdNodeChunks();
+            verify(f.world).setChunkForceLoaded(6, -3, false);
+        }
+    }
+
     private static final class Cycles implements AutoCloseable {
         final Map<Long, Runnable> tasks = new HashMap<>();
         final MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class, CALLS_REAL_METHODS);
@@ -659,6 +819,9 @@ class NodeManagerCyclesTest {
             bukkit.when(Bukkit::getScheduler).thenReturn(scheduler);
             when(scheduler.runTaskTimer(eq(DowsingMain.plugin), any(Runnable.class), eq(0L), anyLong())).thenAnswer(inv -> {
                 tasks.put(inv.getArgument(3), inv.getArgument(1)); return mock(BukkitTask.class);
+            });
+            when(scheduler.runTask(eq(DowsingMain.plugin), any(Runnable.class))).thenAnswer(inv -> {
+                inv.<Runnable>getArgument(1).run(); return mock(BukkitTask.class);
             });
         }
         @Override public void close() { bukkit.close(); }

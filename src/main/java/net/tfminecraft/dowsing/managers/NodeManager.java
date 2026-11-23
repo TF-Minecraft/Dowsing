@@ -289,11 +289,13 @@ public class NodeManager implements Listener{
 							if(!new ItemDropper().dropItems(n)) continue;
 							n.setTimeLeft(n.getModifiedTime());
 							n.setInputCounter(0);
+							startDrain(n);
 						}
 						n.tickCycle();
 						if(n.getCycleTime().equals(Cache.cycleLength)) {
 							n.setCycleTime(0);
 							n.input();
+							startDrain(n);
 						}
 						if(!n.getIsActive()) continue;
 						n.tick();
@@ -344,8 +346,12 @@ public class NodeManager implements Listener{
 	private static boolean startCleared = false;
 
 	/**
-	 * Keeps a producing node's chunk force-loaded, so it produces and its hopper runs with nobody near,
-	 * and lets go of the chunk once no node in it produces: switched off, unowned or in a held realm. A
+	 * Keeps a producing node's chunk force-loaded while it works, so it produces and its hopper runs with
+	 * nobody near. With timed chunks (the default) that is only around its drops and inputs: the chunk loads
+	 * in the background a little before, and stays for the drain time after (longer while the node's hopper
+	 * still holds items); "always" keeps it the whole time. Configured keep-active chunks stay forced so their
+	 * world keeps ticking while nobody is online. Lets go of the chunk once no node in it needs it: switched
+	 * off, unowned, in a held realm, or between a timed node's events. A
 	 * removed node's chunk is let go when it breaks ({@link #releaseChunkOf}). A forced chunk never unloads
 	 * and keeps every chunk a player loads within 13 chunks of it in memory, so an idle node's chunk must
 	 * not stay forced. The force flag (not a plugin ticket) is kept on purpose: like before, it keeps the
@@ -356,9 +362,23 @@ public class NodeManager implements Listener{
 	 */
 	static void holdNodeChunks() {
 		if(!SimpleFactionsApi.ready()) return;
+		advanceDrains();
+		if(!startCleared) {
+			// Drain windows do not survive a restart: every producing node gets one on the first pass, so
+			// output a restart left in its hopper is still moved (and the window extends while it is not).
+			for(Node n : nodes) {
+				try {
+					if(producing(n)) startDrain(n);
+				} catch(RuntimeException ex) {
+					// Handled like any node that cannot be checked, in the loop below.
+				}
+			}
+		}
 		Set<NodeChunk> wanted = new HashSet<>();
+		Set<NodeChunk> soon = new HashSet<>();
 		Set<NodeChunk> unknown = new HashSet<>();
 		Set<NodeChunk> idle = new HashSet<>(heldChunks);
+		wanted.addAll(keepActiveChunks());
 		boolean lookupFailed = false;
 		for(Node n : nodes) {
 			NodeChunk chunk;
@@ -371,7 +391,9 @@ public class NodeManager implements Listener{
 			}
 			if(chunk == null) continue;
 			try {
-				if(producing(n)) wanted.add(chunk);
+				// With timed chunks a producing node needs its chunk only around a drop or an input.
+				if(producing(n) && needsChunkNow(n)) wanted.add(chunk);
+				else if(producing(n) && needsChunkSoon(n)) soon.add(chunk);
 				else if(!startCleared) idle.add(chunk);
 			} catch(RuntimeException ex) {
 				// Not known whether it produces: its chunk keeps what it had and is not let go.
@@ -379,8 +401,13 @@ public class NodeManager implements Listener{
 				unknown.add(chunk);
 			}
 		}
+		soon.removeAll(wanted);
 		idle.removeAll(wanted);
+		idle.removeAll(soon);
 		idle.removeAll(unknown);
+		upcoming.clear();
+		upcoming.addAll(wanted);
+		upcoming.addAll(soon);
 		Set<NodeChunk> next = new HashSet<>();
 		if(lookupFailed) {
 			// A node whose chunk is unknown may be in any of them: nothing is let go this pass. Held
@@ -397,6 +424,16 @@ public class NodeManager implements Listener{
 			// A held chunk that could not be checked stays held, so it is still let go once idle.
 			if(setForced(chunk, true) || keepAll || heldChunks.contains(chunk)) next.add(chunk);
 		}
+		for(NodeChunk chunk : soon) {
+			// Loaded in the background ahead of a drop or input, so the pass never waits for the disk.
+			try {
+				if(chunk.loaded()) setForced(chunk, true);
+				else preload(chunk);
+			} catch(RuntimeException ex) {
+				logChunkFailure("Failed to load node chunk " + chunk.x() + ", " + chunk.z(), ex);
+			}
+			next.add(chunk);
+		}
 		for(NodeChunk chunk : idle) {
 			// Kept when it could not be let go, so the next pass tries again.
 			if(!setForced(chunk, false)) next.add(chunk);
@@ -409,8 +446,106 @@ public class NodeManager implements Listener{
 		if(!lookupFailed) startCleared = true;
 	}
 
-	private static void logChunkFailure(String message, RuntimeException ex) {
+	private static void logChunkFailure(String message, Throwable ex) {
 		DowsingMain.plugin.getLogger().log(java.util.logging.Level.SEVERE, message, ex);
+	}
+
+	/** Chunks wanted or about to be wanted this pass; a background load finishing later only holds these. */
+	private static final Set<NodeChunk> upcoming = new HashSet<>();
+	/** Chunks with a background load still running. */
+	private static final Set<NodeChunk> loading = new HashSet<>();
+	/** Per node: minutes its chunk stays held after a drop or input, and the extensions used. */
+	private static final Map<java.util.UUID, int[]> drains = new HashMap<>();
+
+	/** True when the node drops, takes inputs or is draining this pass, or chunks are not timed. */
+	static boolean needsChunkNow(Node n) {
+		if(!Cache.timedNodeChunks) return true;
+		if(n.getTimeLeft() <= 0 || drains.containsKey(n.getId())) return true;
+		return Cache.cycleLength != null && n.getCycleTime() + 1 >= Cache.cycleLength;
+	}
+
+	/** True when a drop or an input comes within its lead time, so the chunk loads in the background. */
+	static boolean needsChunkSoon(Node n) {
+		if(n.getTimeLeft() <= Cache.nodeChunkLeadMinutes) return true;
+		return Cache.cycleLength != null && Cache.cycleLength - n.getCycleTime() <= Cache.nodeChunkInputLeadMinutes + 1;
+	}
+
+	/** Keeps a node's chunk held for the drain time after it dropped items or took inputs. */
+	static void startDrain(Node n) {
+		if(Cache.timedNodeChunks) drains.put(n.getId(), new int[] {Cache.nodeChunkDrainMinutes, 0});
+	}
+
+	/**
+	 * Counts down each node's drain time, once per pass. When it runs out while the node's hopper still
+	 * holds items it is extended, up to the configured number of times; removed nodes are forgotten.
+	 */
+	static void advanceDrains() {
+		Set<java.util.UUID> present = new HashSet<>();
+		Map<java.util.UUID, Node> byId = new HashMap<>();
+		for(Node n : nodes) {
+			present.add(n.getId());
+			byId.put(n.getId(), n);
+		}
+		drains.keySet().retainAll(present);
+		java.util.Iterator<Map.Entry<java.util.UUID, int[]>> it = drains.entrySet().iterator();
+		while(it.hasNext()) {
+			Map.Entry<java.util.UUID, int[]> e = it.next();
+			int[] d = e.getValue();
+			if(--d[0] > 0) continue;
+			if(d[1] < Cache.nodeChunkMaxExtensions && hopperHoldsItems(byId.get(e.getKey()))) {
+				d[0] = Cache.nodeChunkDrainMinutes;
+				d[1]++;
+			} else {
+				it.remove();
+			}
+		}
+	}
+
+	/** Whether the hopper on top of the node still holds items; false when its chunk is not loaded. */
+	static boolean hopperHoldsItems(Node n) {
+		try {
+			NodeChunk chunk = NodeChunk.of(n);
+			if(chunk == null || !chunk.loaded()) return false;
+			Block block = n.getLoc().clone().add(0, 1, 0).getBlock();
+			if(block.getType() != Material.HOPPER) return false;
+			return !((org.bukkit.block.Hopper) block.getState(false)).getInventory().isEmpty();
+		} catch(RuntimeException ex) {
+			logChunkFailure("Failed to check node " + n.getId() + "'s hopper", ex);
+			return false;
+		}
+	}
+
+	/** Loads a chunk without blocking the server thread and holds it once loaded, if still needed then. */
+	static void preload(NodeChunk chunk) {
+		if(!loading.add(chunk)) return;
+		try {
+			chunk.world().getChunkAtAsync(chunk.x(), chunk.z()).whenComplete((loaded, ex) ->
+					Bukkit.getScheduler().runTask(DowsingMain.plugin, () -> {
+						loading.remove(chunk);
+						if(ex != null) logChunkFailure("Failed to load node chunk " + chunk.x() + ", " + chunk.z(), ex);
+						// Not held when no node needs it any more, or a removed node's chunk was let go meanwhile.
+						else if(upcoming.contains(chunk) && heldChunks.contains(chunk)) setForced(chunk, true);
+					}));
+		} catch(RuntimeException ex) {
+			loading.remove(chunk);
+			logChunkFailure("Failed to load node chunk " + chunk.x() + ", " + chunk.z(), ex);
+		}
+	}
+
+	/** The configured always-loaded chunks whose world exists; a malformed entry is skipped. */
+	static Set<NodeChunk> keepActiveChunks() {
+		Set<NodeChunk> chunks = new HashSet<>();
+		for(String entry : Cache.keepActiveChunks) {
+			String[] p = entry.trim().split("\\s+");
+			World w = p.length == 3 ? Bukkit.getWorld(p[0]) : null;
+			if(w == null) continue;
+			try {
+				chunks.add(new NodeChunk(w, Integer.parseInt(p[1]) >> 4, Integer.parseInt(p[2]) >> 4));
+			} catch(NumberFormatException ex) {
+				// Skipped like an unknown world.
+			}
+		}
+		return chunks;
 	}
 
 	/** Sets one chunk's force flag; a failing chunk is logged and does not stop the others. */
@@ -447,6 +582,9 @@ public class NodeManager implements Listener{
 	static void forgetHeldChunks() {
 		heldChunks.clear();
 		startCleared = false;
+		upcoming.clear();
+		loading.clear();
+		drains.clear();
 	}
 
 	/** Every 30 s: resync node benefits when a node's guild or realm changed without a node event. */
