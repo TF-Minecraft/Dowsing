@@ -755,6 +755,27 @@ class NodeManagerCyclesTest {
     }
 
     @Test
+    void aBackgroundLoadForARemovedNodeOrAFailingChunkCheckHoldsNothing() {
+        Node node = f.node; when(node.getIsActive()).thenReturn(true); NodeManager.nodes.add(node);
+        Cache.cycleLength = 60; when(node.getTimeLeft()).thenReturn(1); when(node.getCycleTime()).thenReturn(10);
+        when(f.world.isChunkLoaded(0, 0)).thenReturn(false);
+        java.util.concurrent.CompletableFuture<org.bukkit.Chunk> load = new java.util.concurrent.CompletableFuture<>();
+        when(f.world.getChunkAtAsync(0, 0)).thenReturn(load);
+        try (Cycles cycles = new Cycles()) {
+            NodeManager.holdNodeChunks();
+            // The node breaks before the load finishes: its chunk was let go, so the late load holds nothing.
+            NodeManager.nodes.remove(node); NodeManager.releaseChunkOf(node);
+            load.complete(f.chunk);
+            verify(f.world, never()).setChunkForceLoaded(0, 0, true);
+            // A chunk whose loaded state cannot be read is logged; the pass goes on and still produces.
+            NodeManager.nodes.add(node);
+            when(f.world.isChunkLoaded(0, 0)).thenThrow(new IllegalStateException("world gone"));
+            NodeManager.holdNodeChunks();
+            verify(f.logger).log(eq(java.util.logging.Level.SEVERE), contains("Failed to load node chunk 0, 0"), any(IllegalStateException.class));
+        }
+    }
+
+    @Test
     void keepActiveChunksStayForcedAndBadEntriesAreSkipped() {
         Cache.keepActiveChunks = List.of("TFMC_Map 100 -40", "bad", "TFMC_Map x 3", "nowhere 1 2");
         try (Cycles cycles = new Cycles()) {

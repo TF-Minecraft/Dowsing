@@ -415,8 +415,12 @@ public class NodeManager implements Listener{
 		}
 		for(NodeChunk chunk : soon) {
 			// Loaded in the background ahead of a drop or input, so the pass never waits for the disk.
-			if(chunk.loaded()) setForced(chunk, true);
-			else preload(chunk);
+			try {
+				if(chunk.loaded()) setForced(chunk, true);
+				else preload(chunk);
+			} catch(RuntimeException ex) {
+				logChunkFailure("Failed to load node chunk " + chunk.x() + ", " + chunk.z(), ex);
+			}
 			next.add(chunk);
 		}
 		for(NodeChunk chunk : idle) {
@@ -508,7 +512,8 @@ public class NodeManager implements Listener{
 					Bukkit.getScheduler().runTask(DowsingMain.plugin, () -> {
 						loading.remove(chunk);
 						if(ex != null) logChunkFailure("Failed to load node chunk " + chunk.x() + ", " + chunk.z(), ex);
-						else if(upcoming.contains(chunk)) setForced(chunk, true);
+						// Not held when no node needs it any more, or a removed node's chunk was let go meanwhile.
+						else if(upcoming.contains(chunk) && heldChunks.contains(chunk)) setForced(chunk, true);
 					}));
 		} catch(RuntimeException ex) {
 			loading.remove(chunk);
